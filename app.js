@@ -8,15 +8,15 @@ class GeolocationApp {
         this.currentPhoto = null;
         this.currentPosition = null;
         this.watchId = null;
+        this.accessToken = null;
+        this.isAuthorized = false;
         
         this.initializeElements();
         this.initializeEventListeners();
         this.checkAuth();
-        this.startGeolocation();
     }
 
     initializeElements() {
-        // Элементы DOM
         this.elements = {
             authSection: document.getElementById('authSection'),
             geoSendSection: document.getElementById('geoSendSection'),
@@ -47,7 +47,8 @@ class GeolocationApp {
             
             navSend: document.getElementById('navSend'),
             navHistory: document.getElementById('navHistory'),
-            navAdmin: document.getElementById('navAdmin')
+            navAdmin: document.getElementById('navAdmin'),
+            logoutBtn: document.getElementById('logoutBtn')
         };
     }
 
@@ -65,32 +66,46 @@ class GeolocationApp {
     // Авторизация через OAuth
     authorize() {
         const authUrl = `https://hdl.bitrix24.ru/oauth/authorize/?client_id=${CONFIG.CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
+        console.log('🔑 Переход на авторизацию:', authUrl);
         window.location.href = authUrl;
     }
 
     checkAuth() {
+        console.log('🔍 Проверка авторизации...');
+        
+        // Проверяем hash параметры (возврат после авторизации)
         const hash = window.location.hash;
+        console.log('📍 Hash:', hash);
+        
         if (hash) {
             const params = new URLSearchParams(hash.substring(1));
-            const accessToken = params.get('access_token');
-            if (accessToken) {
-                localStorage.setItem('b24_token', accessToken);
+            this.accessToken = params.get('access_token');
+            
+            if (this.accessToken) {
+                console.log('✅ Токен получен');
+                localStorage.setItem('b24_token', this.accessToken);
                 window.history.pushState('', '', window.location.pathname);
-                this.getUserInfo(accessToken);
+                this.getUserInfo(this.accessToken);
                 return;
             }
         }
 
+        // Проверяем сохраненный токен
         const token = localStorage.getItem('b24_token');
         if (token) {
+            console.log('💾 Токен из localStorage');
+            this.accessToken = token;
             this.getUserInfo(token);
         } else {
+            console.log('❌ Токен не найден');
             this.showAuthSection();
         }
     }
 
     async getUserInfo(token) {
         try {
+            console.log('👤 Загрузка данных пользователя...');
+            
             const response = await fetch(`${CONFIG.REST_URL}user.current`, {
                 method: 'POST',
                 headers: {
@@ -102,25 +117,41 @@ class GeolocationApp {
             });
 
             const data = await response.json();
+            console.log('📦 Данные пользователя:', data);
+            
             if (data.result) {
                 this.user = data.result;
+                this.isAuthorized = true;
                 this.showGeoSendSection();
                 this.updateUserInfo();
                 this.loadHistory();
+                this.startGeolocation();
+                this.showStatus(`✅ Добро пожаловать, ${this.user.NAME || this.user.LOGIN}!`, 'success');
             } else {
-                throw new Error('Не удалось получить данные пользователя');
+                throw new Error(data.error_description || 'Не удалось получить данные пользователя');
             }
         } catch (error) {
-            console.error('Ошибка получения данных пользователя:', error);
+            console.error('❌ Ошибка:', error);
+            localStorage.removeItem('b24_token');
+            this.accessToken = null;
             this.showAuthSection();
+            this.showStatus('❌ Ошибка авторизации. Попробуйте снова.', 'error');
         }
     }
 
     updateUserInfo() {
-        this.elements.userName.textContent = this.user.NAME || this.user.LOGIN || 'Пользователь';
+        if (!this.user) return;
+        
+        const name = this.user.NAME || this.user.LOGIN || this.user.EMAIL || 'Пользователь';
+        this.elements.userName.textContent = name;
+        
         if (this.user.PERSONAL_PHOTO) {
             this.elements.userAvatar.src = this.user.PERSONAL_PHOTO;
+        } else {
+            // Аватар по умолчанию
+            this.elements.userAvatar.src = `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%232c3e7a"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="white" font-size="40"%3E${name.charAt(0).toUpperCase()}%3C/text%3E%3C/svg%3E`;
         }
+        
         this.elements.userInfo.classList.remove('hidden');
     }
 
@@ -148,7 +179,8 @@ class GeolocationApp {
         };
 
         this.elements.geoStatusText.textContent = '✅ Местоположение определено';
-        this.elements.geoStatus.querySelector('.dot').classList.add('active');
+        const dot = this.elements.geoStatus.querySelector('.dot');
+        if (dot) dot.classList.add('active');
         this.elements.geoCoords.classList.remove('hidden');
         this.elements.lat.textContent = this.currentPosition.lat.toFixed(6);
         this.elements.lng.textContent = this.currentPosition.lng.toFixed(6);
@@ -157,19 +189,23 @@ class GeolocationApp {
     }
 
     handleGeoError(error) {
-        console.error('Ошибка геолокации:', error);
-        this.elements.geoStatusText.textContent = '❌ Ошибка определения местоположения';
-        this.elements.sendGeoBtn.disabled = true;
+        console.error('❌ Ошибка геолокации:', error);
+        let message = '❌ Ошибка определения местоположения';
         
-        // Предложить ввести координаты вручную
-        if (error.code === 1) {
-            this.showManualCoordsInput();
+        switch(error.code) {
+            case 1:
+                message = '❌ Доступ к геолокации запрещен. Разрешите доступ в настройках браузера.';
+                break;
+            case 2:
+                message = '❌ Информация о местоположении недоступна.';
+                break;
+            case 3:
+                message = '⏱️ Превышено время ожидания геолокации.';
+                break;
         }
-    }
-
-    showManualCoordsInput() {
-        // Можно добавить модальное окно для ручного ввода координат
-        console.log('Предложить ручной ввод координат');
+        
+        this.elements.geoStatusText.textContent = message;
+        this.elements.sendGeoBtn.disabled = true;
     }
 
     // Загрузка фото
@@ -177,7 +213,12 @@ class GeolocationApp {
         const file = event.target.files[0];
         if (!file) return;
 
-        // Проверка размера (максимум 5MB)
+        if (!file.type.startsWith('image/')) {
+            alert('Пожалуйста, выберите изображение');
+            this.elements.photoInput.value = '';
+            return;
+        }
+
         if (file.size > 5 * 1024 * 1024) {
             alert('Файл слишком большой. Максимальный размер 5MB');
             this.elements.photoInput.value = '';
@@ -191,6 +232,10 @@ class GeolocationApp {
             this.elements.photoPreview.classList.remove('hidden');
             this.elements.photoInput.value = '';
         };
+        reader.onerror = () => {
+            alert('Ошибка чтения файла');
+            this.elements.photoInput.value = '';
+        };
         reader.readAsDataURL(file);
     }
 
@@ -200,8 +245,13 @@ class GeolocationApp {
         this.elements.previewImg.src = '';
     }
 
-    // Отправка геолокации
+    // Отправка геолокации (через вебхук)
     async sendGeolocation() {
+        if (!this.isAuthorized) {
+            this.showStatus('❌ Необходимо авторизоваться', 'error');
+            return;
+        }
+
         if (!this.currentPosition) {
             this.showStatus('❌ Местоположение не определено', 'error');
             return;
@@ -214,30 +264,29 @@ class GeolocationApp {
         this.showStatus('⏳ Отправка...', 'loading');
 
         try {
-            const token = localStorage.getItem('b24_token');
+            const userName = this.user.NAME || this.user.LOGIN || 'Пользователь';
             
-            // Формируем сообщение
-            let messageText = `📍 Геолокация от ${this.user.NAME || this.user.LOGIN}\n`;
+            let messageText = `📍 Геолокация от ${userName}\n`;
             messageText += `🕐 Время: ${timestamp}\n`;
             messageText += `📌 Координаты: ${this.currentPosition.lat}, ${this.currentPosition.lng}\n`;
             messageText += `💬 Комментарий: ${comment}\n`;
             messageText += `🔗 Карта: https://www.openstreetmap.org/?mlat=${this.currentPosition.lat}&mlon=${this.currentPosition.lng}&zoom=15`;
 
-            // Отправляем сообщение в чат
+            // Отправка через вебхук (без auth, используем REST_URL)
             const messageData = {
-                auth: token,
-                CHAT_ID: CONFIG.CHAT_ID,
+                CHAT_ID: CONFIG.CHAT_ID || null,
                 MESSAGE: messageText
             };
 
-            // Если есть фото, добавляем как вложение
+            // Если есть фото
             if (this.currentPhoto) {
-                // Сжимаем фото перед отправкой
                 const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
                 messageData.FILES = {
                     'photo.jpg': compressedPhoto
                 };
             }
+
+            console.log('📤 Отправка данных:', messageData);
 
             const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
                 method: 'POST',
@@ -248,24 +297,35 @@ class GeolocationApp {
             });
 
             const data = await response.json();
+            console.log('📥 Ответ:', data);
 
             if (data.result) {
-                this.showStatus('✅ Геолокация успешно отправлена!', 'success');
+                this.showStatus('✅ Геолокация успешно отправлена в чат!', 'success');
                 this.elements.comment.value = '';
                 this.removePhoto();
+                
                 this.saveToHistory({
                     time: timestamp,
                     comment: comment,
                     coords: this.currentPosition,
-                    photo: this.currentPhoto
+                    photo: this.currentPhoto,
+                    messageId: data.result
                 });
                 this.loadHistory();
             } else {
-                throw new Error(data.error_description || 'Ошибка отправки');
+                throw new Error(data.error_description || data.error || 'Ошибка отправки');
             }
         } catch (error) {
-            console.error('Ошибка отправки:', error);
+            console.error('❌ Ошибка отправки:', error);
             this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
+            
+            this.saveToHistory({
+                time: timestamp,
+                comment: comment + ' (не отправлено)',
+                coords: this.currentPosition,
+                photo: this.currentPhoto,
+                error: error.message
+            });
         } finally {
             this.elements.sendGeoBtn.disabled = false;
         }
@@ -273,51 +333,63 @@ class GeolocationApp {
 
     // Сжатие изображения
     compressImage(dataUrl, maxWidth, maxHeight) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
+        return new Promise((resolve, reject) => {
+            try {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
 
-                if (width > height) {
-                    if (width > maxWidth) {
-                        height = (height * maxWidth) / width;
-                        width = maxWidth;
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height = (height * maxWidth) / width;
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width = (width * maxHeight) / height;
+                            height = maxHeight;
+                        }
                     }
-                } else {
-                    if (height > maxHeight) {
-                        width = (width * maxHeight) / height;
-                        height = maxHeight;
-                    }
-                }
 
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                // Конвертируем в base64 с сжатием
-                resolve(canvas.toDataURL('image/jpeg', 0.7));
-            };
-            img.src = dataUrl;
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    resolve(canvas.toDataURL('image/jpeg', 0.7));
+                };
+                img.onerror = () => reject(new Error('Ошибка загрузки изображения'));
+                img.src = dataUrl;
+            } catch (error) {
+                reject(error);
+            }
         });
     }
 
     // История
     saveToHistory(item) {
         const history = JSON.parse(localStorage.getItem('geolocation_history') || '[]');
-        history.unshift(item);
+        history.unshift({
+            ...item,
+            userId: this.user?.ID,
+            userName: this.user?.NAME || this.user?.LOGIN
+        });
+        if (history.length > 100) history.pop();
         localStorage.setItem('geolocation_history', JSON.stringify(history));
     }
 
     loadHistory() {
         const history = JSON.parse(localStorage.getItem('geolocation_history') || '[]');
-        this.renderHistory(history);
+        const userHistory = history.filter(item => item.userId === this.user?.ID);
+        this.renderHistory(userHistory);
     }
 
     renderHistory(history) {
         const list = this.elements.historyList;
+        if (!list) return;
+        
         if (history.length === 0) {
             list.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">История отправок пуста</p>';
             return;
@@ -325,11 +397,12 @@ class GeolocationApp {
 
         list.innerHTML = history.map(item => `
             <div class="history-item">
-                <div class="time">${item.time}</div>
+                <div class="time">${item.time || 'Время не указано'}</div>
                 <div class="content">
-                    <div class="comment">${item.comment}</div>
-                    <div class="coords">📍 ${item.coords.lat.toFixed(6)}, ${item.coords.lng.toFixed(6)}</div>
-                    ${item.photo ? `<img src="${item.photo}" alt="Фото" class="photo">` : ''}
+                    <div class="comment">${item.comment || 'Без комментария'}</div>
+                    <div class="coords">📍 ${item.coords ? `${item.coords.lat.toFixed(6)}, ${item.coords.lng.toFixed(6)}` : 'Координаты не указаны'}</div>
+                    ${item.photo ? `<img src="${item.photo}" alt="Фото" class="photo" loading="lazy">` : ''}
+                    ${item.error ? `<div style="color:red;font-size:12px;margin-top:4px;">⚠️ ${item.error}</div>` : ''}
                 </div>
             </div>
         `).join('');
@@ -352,12 +425,17 @@ class GeolocationApp {
     }
 
     openAdminPanel() {
+        if (!this.isAuthorized) {
+            this.showStatus('❌ Необходимо авторизоваться', 'error');
+            return;
+        }
         window.open('/admin.html', '_blank');
     }
 
-    // Отображение статуса
     showStatus(message, type) {
         const status = this.elements.sendStatus;
+        if (!status) return;
+        
         status.textContent = message;
         status.className = 'send-status ' + type;
         status.classList.remove('hidden');
@@ -369,34 +447,39 @@ class GeolocationApp {
         }
     }
 
-    // Переключение секций
     showAuthSection() {
         this.elements.authSection.classList.remove('hidden');
         this.elements.geoSendSection.classList.add('hidden');
         this.elements.historySection.classList.add('hidden');
         this.elements.userInfo.classList.add('hidden');
+        this.elements.sendGeoBtn.disabled = true;
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     }
 
     showGeoSendSection() {
         this.elements.authSection.classList.add('hidden');
         this.elements.geoSendSection.classList.remove('hidden');
         this.elements.historySection.classList.add('hidden');
+        this.elements.navSend.classList.add('active');
     }
 
-    // Выход
     logout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
             localStorage.removeItem('b24_token');
             localStorage.removeItem('geolocation_history');
             this.user = null;
+            this.isAuthorized = false;
+            this.accessToken = null;
             this.currentPosition = null;
+            if (this.watchId) {
+                navigator.geolocation.clearWatch(this.watchId);
+            }
             this.showAuthSection();
-            this.elements.sendGeoBtn.disabled = true;
+            this.showStatus('👋 Вы вышли из системы', 'loading');
         }
     }
 }
 
-// Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {
     new GeolocationApp();
 });
