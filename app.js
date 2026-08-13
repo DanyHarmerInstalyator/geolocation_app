@@ -63,11 +63,19 @@ class GeolocationApp {
         this.elements.navAdmin.addEventListener('click', () => this.openAdminPanel());
     }
 
-    // 🔑 Авторизация через OAuth
+    // 🔑 Авторизация через OAuth с поддержкой пуш-подтверждения
     authorize() {
-        // Используем response_type=token для получения access_token сразу
-        const authUrl = `https://hdl.bitrix24.ru/oauth/authorize/?client_id=${CONFIG.CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
+        const authUrl = 
+            `https://hdl.bitrix24.ru/oauth/authorize/` +
+            `?client_id=${CONFIG.CLIENT_ID}` +
+            `&response_type=token` +
+            `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
+            `&approval_prompt=auto` +  // Автоматическое подтверждение через приложение
+            `&state=${Date.now()}`;     // Защита от CSRF
+        
         console.log('🔑 Переход на авторизацию:', authUrl);
+        
+        // Открываем в том же окне (редирект на Битрикс24)
         window.location.href = authUrl;
     }
 
@@ -133,45 +141,19 @@ class GeolocationApp {
                 this.updateUserInfo();
                 this.loadHistory();
                 this.startGeolocation();
-                this.showStatus(`✅ Добро пожаловать, ${this.user.NAME || this.user.LOGIN || 'Пользователь'}!`, 'success');
-            } else {
-                // Если токен невалидный, пробуем через вебхук
-                console.log('⚠️ Токен невалидный, пробуем вебхук...');
-                await this.getUserViaWebhook();
-            }
-        } catch (error) {
-            console.error('❌ Ошибка:', error);
-            // Пробуем через вебхук как fallback
-            await this.getUserViaWebhook();
-        }
-    }
-
-    // Fallback: получение данных через вебхук (только для создателя)
-    async getUserViaWebhook() {
-        console.log('🔄 Fallback: получение данных через вебхук...');
-        
-        try {
-            const response = await fetch(`${CONFIG.REST_URL}user.current`);
-            const data = await response.json();
-            
-            if (data.result) {
-                this.user = data.result;
-                this.isAuthorized = true;
-                localStorage.setItem('b24_user_id', this.user.ID);
-                this.showGeoSendSection();
-                this.updateUserInfo();
-                this.loadHistory();
-                this.startGeolocation();
-                this.showStatus(`⚠️ Работа через вебхук (пользователь: ${this.user.NAME || this.user.LOGIN})`, 'loading');
+                
+                // Проверяем, через что авторизовались
+                const authMethod = this.user.LAST_LOGIN ? 'через приложение' : 'через веб';
+                this.showStatus(`✅ Добро пожаловать, ${this.user.NAME || this.user.LOGIN || 'Пользователь'}! (${authMethod})`, 'success');
             } else {
                 throw new Error('Не удалось получить данные пользователя');
             }
         } catch (error) {
-            console.error('❌ Ошибка fallback:', error);
+            console.error('❌ Ошибка:', error);
             localStorage.removeItem('b24_token');
             localStorage.removeItem('b24_user_id');
             this.showAuthSection();
-            this.showStatus('❌ Ошибка подключения. Нажмите "Войти" для авторизации.', 'error');
+            this.showStatus('❌ Ошибка авторизации. Попробуйте снова.', 'error');
         }
     }
 
@@ -310,7 +292,7 @@ class GeolocationApp {
 
             console.log('📤 Отправка:', messageData);
 
-            // Отправляем через вебхук (у него есть права на отправку)
+            // Отправляем через вебхук
             const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
                 method: 'POST',
                 headers: {
