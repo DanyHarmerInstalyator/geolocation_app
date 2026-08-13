@@ -63,82 +63,59 @@ class GeolocationApp {
         this.elements.navAdmin.addEventListener('click', () => this.openAdminPanel());
     }
 
-   // 🔑 Авторизация через OAuth с поддержкой мобильного приложения
-authorize() {
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    
-    // Основной URL для авторизации
-    const authUrl = 
-        `https://hdl.bitrix24.ru/oauth/authorize/` +
-        `?client_id=${CONFIG.CLIENT_ID}` +
-        `&response_type=code` +
-        `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
-    
-    console.log('📱 Мобильное устройство?', isMobile);
-    
-    if (isMobile) {
-        // Deep link для мобильного приложения Bitrix24
-        // Это откроет приложение, если оно установлено
-        const mobileLink = `bitrix24://oauth/authorize/` +
+    // 🔑 Авторизация через OAuth.
+    // ВАЖНО: пуш-подтверждение входа с телефона — это не кастомная deep-link-схема,
+    // а встроенный механизм самого портала Битрикс24. Он срабатывает сам,
+    // когда пользователь заходит на стандартную страницу авторизации в браузере,
+    // если у него включено подтверждение входа через мобильное приложение.
+    // Схемы вида bitrix24://oauth/authorize/ не существует — такая ссылка
+    // просто открывает приложение "в пустоту", без передачи ему контекста
+    // авторизации, поэтому оно ничего не показывает и ничего не подтверждает.
+    authorize() {
+        const authUrl =
+            `https://hdl.bitrix24.ru/oauth/authorize/` +
             `?client_id=${CONFIG.CLIENT_ID}` +
             `&response_type=code` +
             `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
-        
-        console.log('📱 Пробуем открыть через deep link:', mobileLink);
-        
-        // Пытаемся открыть через deep link
-        window.location.href = mobileLink;
-        
-        // Fallback: если приложение не открылось через 2 секунды
-        setTimeout(() => {
-            console.log('🔄 Deep link не сработал, открываем в браузере');
-            window.location.href = authUrl;
-        }, 2000);
-    } else {
-        console.log('💻 Открываем в браузере');
+
+        console.log('🔑 Переход на авторизацию:', authUrl);
         window.location.href = authUrl;
     }
-}
 
     // Проверка авторизации
-checkAuth() {
-    console.log('🔍 Проверка авторизации...');
+    checkAuth() {
+        console.log('🔍 Проверка авторизации...');
 
-    // Проверяем параметры URL (code от OAuth)
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
 
-    if (code) {
-        console.log('✅ Получен code:', code);
-        // Убираем code из URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-        this.exchangeCodeForToken(code);
-        return;
+        if (code) {
+            console.log('✅ Получен code:', code);
+            window.history.replaceState({}, document.title, window.location.pathname);
+            this.exchangeCodeForToken(code);
+            return;
+        }
+
+        const token = localStorage.getItem('b24_token');
+        const domain = localStorage.getItem('b24_domain');
+        const refreshToken = localStorage.getItem('b24_refresh_token');
+
+        if (token && domain) {
+            console.log('💾 Восстанавливаем сессию из localStorage');
+            this.accessToken = token;
+            this.domain = domain;
+            this.refreshToken = refreshToken;
+            this.isAuthorized = true;
+            this.showGeoSendSection();
+            this.getUserInfo();
+            return;
+        }
+
+        console.log('❌ Нет данных авторизации');
+        this.showAuthSection();
     }
 
-    // ✅ Проверяем сохраненные токены
-    const token = localStorage.getItem('b24_token');
-    const domain = localStorage.getItem('b24_domain');
-    const refreshToken = localStorage.getItem('b24_refresh_token');
-
-    if (token && domain) {
-        console.log('💾 Восстанавливаем сессию из localStorage');
-        this.accessToken = token;
-        this.domain = domain;
-        this.refreshToken = refreshToken;
-        this.isAuthorized = true;
-        
-        // Показываем интерфейс и загружаем данные пользователя
-        this.showGeoSendSection();
-        this.getUserInfo();
-        return;
-    }
-
-    console.log('❌ Нет данных авторизации');
-    this.showAuthSection();
-}
-
-    // Обмен code на access_token — теперь через Worker, client_secret не покидает сервер
+    // Обмен code на access_token — через Worker
     async exchangeCodeForToken(code) {
         console.log('🔄 Обмен code на token...');
         this.showStatus('⏳ Обмен кода на токен...', 'loading');
@@ -177,8 +154,7 @@ checkAuth() {
         }
     }
 
-    // Универсальный вызов REST-метода через Worker.
-    // Если есть OAuth-сессия — запрос идёт от имени реального пользователя.
+    // Универсальный вызов REST-метода через Worker
     async callRest(method, params = {}) {
         const body = { params };
 
@@ -195,9 +171,9 @@ checkAuth() {
         return response.json();
     }
 
-    // Получение данных РЕАЛЬНО авторизованного пользователя (по домену + токену)
+    // Получение данных пользователя
     async getUserInfo() {
-        console.log('🔄 Получение данных пользователя по токену...');
+        console.log('🔄 Получение данных пользователя...');
         this.showStatus('⏳ Загрузка данных пользователя...', 'loading');
 
         try {
@@ -216,8 +192,8 @@ checkAuth() {
                 return;
             }
 
-            // Токен мог протухнуть — пробуем обновить по refresh_token
             if (data.error === 'expired_token' && this.refreshToken) {
+                console.log('🔄 Обновляем токен...');
                 const refreshed = await this.tryRefreshToken();
                 if (refreshed) {
                     return this.getUserInfo();
@@ -254,11 +230,10 @@ checkAuth() {
         return false;
     }
 
-    // Fallback: получение данных через вебхук (ключ хранится только в Worker)
+    // Fallback: получение данных через вебхук
     async getUserViaWebhook() {
         console.log('🔄 Fallback: получение данных через вебхук...');
 
-        // Сбрасываем OAuth-сессию, чтобы callRest пошёл через вебхук-ветку в Worker
         this.accessToken = null;
         this.domain = null;
 
@@ -390,90 +365,82 @@ checkAuth() {
     }
 
     async sendGeolocation() {
-    if (!this.currentPosition) {
-        this.showStatus('❌ Местоположение не определено', 'error');
-        return;
-    }
+        if (!this.currentPosition) {
+            this.showStatus('❌ Местоположение не определено', 'error');
+            return;
+        }
 
-    const comment = this.elements.comment.value.trim() || 'Отправка геолокации';
-    const timestamp = new Date().toLocaleString('ru-RU');
-
-    this.elements.sendGeoBtn.disabled = true;
-    this.showStatus('⏳ Отправка...', 'loading');
-
-    try {
-        const userName = this.user?.NAME || this.user?.LOGIN || 'Пользователь';
+        const comment = this.elements.comment.value.trim() || 'Отправка геолокации';
+        const timestamp = new Date().toLocaleString('ru-RU');
         const lat = this.currentPosition.lat;
         const lng = this.currentPosition.lng;
 
-        // Ссылка на Яндекс.Карты (открывается в мобильном приложении или браузере)
-        const yandexMapsLink = `https://yandex.ru/maps/?pt=${lng},${lat}&z=15&l=map`;
-        const yandexMapsAppLink = `yandexmaps://maps.yandex.ru/?pt=${lng},${lat}&z=15&l=map`;
-        
-        // Определяем мобильное устройство
-        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-        const mapLink = isMobile ? yandexMapsAppLink : yandexMapsLink;
+        this.elements.sendGeoBtn.disabled = true;
+        this.showStatus('⏳ Отправка...', 'loading');
 
-        let messageText = `📍 Геолокация от ${userName}\n`;
-        messageText += `🕐 Время: ${timestamp}\n`;
-        messageText += `📌 Координаты: ${lat}, ${lng}\n`;
-        messageText += `💬 Комментарий: ${comment}\n`;
-        messageText += `🗺️ Яндекс.Карты: ${mapLink}\n`;
-        messageText += `\n---\n`;
-        messageText += `[🗺️ Открыть на Яндекс.Картах](${yandexMapsLink})`;
-        
-        // Добавляем мини-карту в виде ссылки на статическое изображение (если нужно)
-        // Яндекс не предоставляет статические карты бесплатно, поэтому используем ссылку
+        try {
+            const userName = this.user?.NAME || this.user?.LOGIN || 'Пользователь';
 
-        const messageParams = {
-            CHAT_ID: CONFIG.CHAT_ID || null,
-            MESSAGE: messageText
-        };
+            // Ссылки на Яндекс.Карты
+            const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            const mapLink = isMobile ? `yandexmaps://maps.yandex.ru/?pt=${lng},${lat}&z=17&l=map` : yandexMapsUrl;
 
-        if (this.currentPhoto) {
-            const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
-            const base64Only = compressedPhoto.split(',')[1];
-            messageParams.FILES = {
-                n1: ['photo.jpg', base64Only]
+            let messageText = `📍 Геолокация от ${userName}\n`;
+            messageText += `🕐 Время: ${timestamp}\n`;
+            messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
+            messageText += `💬 Комментарий: ${comment}\n`;
+            messageText += `🗺️ Яндекс.Карты: ${mapLink}`;
+
+            const messageParams = {
+                CHAT_ID: CONFIG.CHAT_ID || null,
+                MESSAGE: messageText
             };
-        }
 
-        console.log('📤 Отправка:', messageParams);
+            if (this.currentPhoto) {
+                const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
+                const base64Only = compressedPhoto.split(',')[1];
+                messageParams.FILES = {
+                    n1: ['photo.jpg', base64Only]
+                };
+            }
 
-        const data = await this.callRest('im.message.add', messageParams);
-        console.log('📥 Ответ:', data);
+            console.log('📤 Отправка:', messageParams);
 
-        if (data.result) {
-            this.showStatus('✅ Геолокация успешно отправлена в чат!', 'success');
-            this.elements.comment.value = '';
-            this.removePhoto();
+            const data = await this.callRest('im.message.add', messageParams);
+            console.log('📥 Ответ:', data);
+
+            if (data.result) {
+                this.showStatus('✅ Геолокация успешно отправлена в чат!', 'success');
+                this.elements.comment.value = '';
+                this.removePhoto();
+
+                this.saveToHistory({
+                    time: timestamp,
+                    comment: comment,
+                    coords: this.currentPosition,
+                    photo: this.currentPhoto,
+                    mapLink: mapLink
+                });
+                this.loadHistory();
+            } else {
+                throw new Error(data.error_description || data.error || 'Ошибка отправки');
+            }
+        } catch (error) {
+            console.error('❌ Ошибка:', error);
+            this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
 
             this.saveToHistory({
                 time: timestamp,
-                comment: comment,
+                comment: comment + ' (не отправлено)',
                 coords: this.currentPosition,
                 photo: this.currentPhoto,
-                mapLink: mapLink
+                error: error.message
             });
-            this.loadHistory();
-        } else {
-            throw new Error(data.error_description || data.error || 'Ошибка отправки');
+        } finally {
+            this.elements.sendGeoBtn.disabled = false;
         }
-    } catch (error) {
-        console.error('❌ Ошибка:', error);
-        this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
-
-        this.saveToHistory({
-            time: timestamp,
-            comment: comment + ' (не отправлено)',
-            coords: this.currentPosition,
-            photo: this.currentPhoto,
-            error: error.message
-        });
-    } finally {
-        this.elements.sendGeoBtn.disabled = false;
     }
-}
 
     compressImage(dataUrl, maxWidth, maxHeight) {
         return new Promise((resolve, reject) => {
@@ -529,37 +496,37 @@ checkAuth() {
     }
 
     renderHistory(history) {
-    const list = this.elements.historyList;
-    if (!list) return;
+        const list = this.elements.historyList;
+        if (!list) return;
 
-    if (history.length === 0) {
-        list.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">История отправок пуста</p>';
-        return;
-    }
+        if (history.length === 0) {
+            list.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">История отправок пуста</p>';
+            return;
+        }
 
-    list.innerHTML = history.map(item => {
-        const lat = item.coords?.lat;
-        const lng = item.coords?.lng;
-        const mapLink = lat && lng ? 
-            `https://yandex.ru/maps/?pt=${lng},${lat}&z=15&l=map` : 
-            '#';
-        
-        return `
-            <div class="history-item">
-                <div class="time">${item.time || 'Время не указано'}</div>
-                <div class="content">
-                    <div class="comment">${item.comment || 'Без комментария'}</div>
-                    <div class="coords">
-                        📍 ${lat && lng ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Координаты не указаны'}
-                        ${lat && lng ? `<a href="${mapLink}" target="_blank" style="color:#2c3e7a;margin-left:8px;">🗺️ Яндекс</a>` : ''}
+        list.innerHTML = history.map(item => {
+            const lat = item.coords?.lat;
+            const lng = item.coords?.lng;
+            const mapLink = lat && lng ?
+                `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map` :
+                '#';
+
+            return `
+                <div class="history-item">
+                    <div class="time">${item.time || 'Время не указано'}</div>
+                    <div class="content">
+                        <div class="comment">${item.comment || 'Без комментария'}</div>
+                        <div class="coords">
+                            📍 ${lat && lng ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Координаты не указаны'}
+                            ${lat && lng ? ` <a href="${mapLink}" target="_blank" style="color:#2c3e7a;text-decoration:none;">🗺️ Яндекс.Карты</a>` : ''}
+                        </div>
+                        ${item.photo ? `<img src="${item.photo}" alt="Фото" class="photo" loading="lazy">` : ''}
+                        ${item.error ? `<div style="color:red;font-size:12px;margin-top:4px;">⚠️ ${item.error}</div>` : ''}
                     </div>
-                    ${item.photo ? `<img src="${item.photo}" alt="Фото" class="photo" loading="lazy">` : ''}
-                    ${item.error ? `<div style="color:red;font-size:12px;margin-top:4px;">⚠️ ${item.error}</div>` : ''}
                 </div>
-            </div>
-        `;
-    }).join('');
-}
+            `;
+        }).join('');
+    }
 
     switchTab(tab) {
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
