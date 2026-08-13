@@ -21,18 +21,15 @@
 
         <!-- Основной контент -->
         <main class="app-content">
-            <!-- Состояние авторизации -->
+            <!-- Состояние загрузки -->
             <div id="authSection" class="section">
                 <div class="auth-card">
-                    <div class="auth-icon">🔐</div>
-                    <h2>Требуется авторизация</h2>
-                    <p>Для работы с приложением необходимо авторизоваться через Битрикс24</p>
+                    <div class="auth-icon">🔄</div>
+                    <h2>Загрузка...</h2>
+                    <p>Подключение к Битрикс24</p>
                     <button id="authBtn" class="btn btn-primary btn-large">
-                        🔑 Авторизоваться
+                        🔄 Попробовать снова
                     </button>
-                    <div class="auth-info">
-                        <small>Безопасная авторизация через OAuth 2.0</small>
-                    </div>
                 </div>
             </div>
 
@@ -102,11 +99,7 @@
                 <span class="nav-icon">👥</span>
                 <span class="nav-label">Сотрудники</span>
             </button>
-            <button id="navAuth" class="nav-btn hidden">
-                <span class="nav-icon">🔑</span>
-                <span class="nav-label">Войти</span>
-            </button>
-            <button id="logoutBtn" class="nav-btn hidden">
+            <button id="logoutBtn" class="nav-btn">
                 <span class="nav-icon">🚪</span>
                 <span class="nav-label">Выйти</span>
             </button>
