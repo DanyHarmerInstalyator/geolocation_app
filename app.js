@@ -8,6 +8,7 @@ class GeolocationApp {
         this.currentPhoto = null;
         this.currentPosition = null;
         this.watchId = null;
+        this.accessToken = null;
         this.isAuthorized = false;
         
         this.initializeElements();
@@ -64,7 +65,8 @@ class GeolocationApp {
 
     // 🔑 Авторизация через OAuth
     authorize() {
-        const authUrl = `https://hdl.bitrix24.ru/oauth/authorize/?client_id=${CONFIG.CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
+        // Используем response_type=token для получения access_token сразу
+        const authUrl = `https://hdl.bitrix24.ru/oauth/authorize/?client_id=${CONFIG.CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
         console.log('🔑 Переход на авторизацию:', authUrl);
         window.location.href = authUrl;
     }
@@ -74,49 +76,58 @@ class GeolocationApp {
         console.log('🔍 Проверка авторизации...');
         console.log('📍 Текущий URL:', window.location.href);
         
-        // Проверяем параметры URL (code от OAuth)
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
-        
-        if (code) {
-            console.log('✅ Получен code:', code);
-            // Сохраняем code и переходим к получению данных через вебхук
-            localStorage.setItem('b24_code', code);
-            // Убираем code из URL
-            window.history.pushState('', '', window.location.pathname);
-            // Пробуем получить данные пользователя через вебхук
-            this.getUserViaWebhook();
-            return;
+        // Проверяем hash параметры (access_token приходит в hash)
+        const hash = window.location.hash;
+        if (hash) {
+            const hashParams = new URLSearchParams(hash.substring(1));
+            const accessToken = hashParams.get('access_token');
+            
+            if (accessToken) {
+                console.log('✅ Получен access_token из hash');
+                this.accessToken = accessToken;
+                localStorage.setItem('b24_token', accessToken);
+                // Убираем hash из URL
+                window.history.pushState('', '', window.location.pathname);
+                this.getUserInfo(accessToken);
+                return;
+            }
         }
         
-        // Проверяем сохраненный код или токен
-        const savedCode = localStorage.getItem('b24_code');
-        const savedToken = localStorage.getItem('b24_token');
-        
-        if (savedCode || savedToken) {
-            console.log('💾 Есть сохраненные данные');
-            this.getUserViaWebhook();
+        // Проверяем сохраненный токен
+        const token = localStorage.getItem('b24_token');
+        if (token) {
+            console.log('💾 Токен из localStorage');
+            this.accessToken = token;
+            this.getUserInfo(token);
         } else {
             console.log('❌ Нет данных авторизации');
             this.showAuthSection();
         }
     }
 
-    // Получение данных пользователя через вебхук
-    async getUserViaWebhook() {
-        console.log('🔄 Получение данных через вебхук...');
+    // Получение данных пользователя через OAuth токен
+    async getUserInfo(token) {
+        console.log('🔄 Получение данных пользователя по токену...');
         this.showStatus('⏳ Загрузка данных пользователя...', 'loading');
         
         try {
-            // Получаем данные текущего пользователя через вебхук
-            const response = await fetch(`${CONFIG.REST_URL}user.current`);
+            // Используем токен для получения данных пользователя
+            const response = await fetch(`${CONFIG.REST_URL}user.current`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    auth: token
+                })
+            });
+            
             const data = await response.json();
             console.log('📦 Данные пользователя:', data);
             
             if (data.result) {
                 this.user = data.result;
                 this.isAuthorized = true;
-                // Сохраняем ID пользователя для идентификации
                 localStorage.setItem('b24_user_id', this.user.ID);
                 this.showGeoSendSection();
                 this.updateUserInfo();
@@ -124,12 +135,39 @@ class GeolocationApp {
                 this.startGeolocation();
                 this.showStatus(`✅ Добро пожаловать, ${this.user.NAME || this.user.LOGIN || 'Пользователь'}!`, 'success');
             } else {
-                throw new Error('Не удалось получить данные пользователя');
+                // Если токен невалидный, пробуем через вебхук
+                console.log('⚠️ Токен невалидный, пробуем вебхук...');
+                await this.getUserViaWebhook();
             }
         } catch (error) {
             console.error('❌ Ошибка:', error);
-            // Если не удалось получить данные, показываем кнопку входа
-            localStorage.removeItem('b24_code');
+            // Пробуем через вебхук как fallback
+            await this.getUserViaWebhook();
+        }
+    }
+
+    // Fallback: получение данных через вебхук (только для создателя)
+    async getUserViaWebhook() {
+        console.log('🔄 Fallback: получение данных через вебхук...');
+        
+        try {
+            const response = await fetch(`${CONFIG.REST_URL}user.current`);
+            const data = await response.json();
+            
+            if (data.result) {
+                this.user = data.result;
+                this.isAuthorized = true;
+                localStorage.setItem('b24_user_id', this.user.ID);
+                this.showGeoSendSection();
+                this.updateUserInfo();
+                this.loadHistory();
+                this.startGeolocation();
+                this.showStatus(`⚠️ Работа через вебхук (пользователь: ${this.user.NAME || this.user.LOGIN})`, 'loading');
+            } else {
+                throw new Error('Не удалось получить данные пользователя');
+            }
+        } catch (error) {
+            console.error('❌ Ошибка fallback:', error);
             localStorage.removeItem('b24_token');
             localStorage.removeItem('b24_user_id');
             this.showAuthSection();
@@ -272,6 +310,7 @@ class GeolocationApp {
 
             console.log('📤 Отправка:', messageData);
 
+            // Отправляем через вебхук (у него есть права на отправку)
             const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
                 method: 'POST',
                 headers: {
@@ -428,7 +467,6 @@ class GeolocationApp {
     }
 
     showAuthSection() {
-        // Показываем секцию авторизации с кнопкой "Войти"
         this.elements.authSection.classList.remove('hidden');
         this.elements.geoSendSection.classList.add('hidden');
         this.elements.historySection.classList.add('hidden');
@@ -441,7 +479,6 @@ class GeolocationApp {
         authBtn.classList.remove('btn-primary');
         authBtn.classList.add('btn-success');
         
-        // Скрываем навигацию авторизации
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     }
 
@@ -454,14 +491,13 @@ class GeolocationApp {
 
     logout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
-            // Очищаем все данные
-            localStorage.removeItem('b24_code');
             localStorage.removeItem('b24_token');
             localStorage.removeItem('b24_user_id');
             localStorage.removeItem('geolocation_history');
             
             this.user = null;
             this.isAuthorized = false;
+            this.accessToken = null;
             this.currentPosition = null;
             
             if (this.watchId) {
