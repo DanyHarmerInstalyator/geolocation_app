@@ -1,4 +1,65 @@
 // worker.js
+// Кэш для быстрых ответов
+const cache = new Map();
+
+async function handleOAuthToken(request, env) {
+    try {
+        const { code, redirect_uri } = await request.json();
+
+        if (!code) {
+            return errorResponse('code_is_required', 'Authorization code is required', 400, env);
+        }
+
+        // Проверяем кэш
+        const cacheKey = `token_${code}`;
+        if (cache.has(cacheKey)) {
+            console.log('📦 Используем кэшированный токен');
+            const cached = cache.get(cacheKey);
+            // Очищаем кэш после использования
+            cache.delete(cacheKey);
+            return json(cached, 200, env);
+        }
+
+        const resp = await fetch('https://hdl.bitrix24.ru/oauth/token/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type: 'authorization_code',
+                client_id: env.CLIENT_ID,
+                client_secret: env.CLIENT_SECRET,
+                code,
+                redirect_uri,
+            }),
+        });
+
+        const data = await resp.json();
+
+        if (!data.access_token) {
+            console.error('Token exchange failed:', data);
+            return errorResponse('token_exchange_failed', data, 400, env);
+        }
+
+        const result = {
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            domain: data.domain,
+            member_id: data.member_id,
+            expires_in: data.expires_in,
+            status: 'success'
+        };
+
+        // Кэшируем на 30 секунд
+        cache.set(cacheKey, result);
+        setTimeout(() => cache.delete(cacheKey), 30000);
+
+        return json(result, 200, env);
+
+    } catch (error) {
+        console.error('OAuth token error:', error);
+        return errorResponse('internal_error', error.message, 500, env);
+    }
+}
+
 function corsHeaders(env) {
     return {
         'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',

@@ -63,46 +63,80 @@ class GeolocationApp {
         this.elements.navAdmin.addEventListener('click', () => this.openAdminPanel());
     }
 
-    // 🔑 Авторизация через OAuth
-    authorize() {
-        const authUrl =
-            `https://hdl.bitrix24.ru/oauth/authorize/` +
+   // 🔑 Авторизация через OAuth с поддержкой мобильного приложения
+authorize() {
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    // Основной URL для авторизации
+    const authUrl = 
+        `https://hdl.bitrix24.ru/oauth/authorize/` +
+        `?client_id=${CONFIG.CLIENT_ID}` +
+        `&response_type=code` +
+        `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
+    
+    console.log('📱 Мобильное устройство?', isMobile);
+    
+    if (isMobile) {
+        // Deep link для мобильного приложения Bitrix24
+        // Это откроет приложение, если оно установлено
+        const mobileLink = `bitrix24://oauth/authorize/` +
             `?client_id=${CONFIG.CLIENT_ID}` +
             `&response_type=code` +
             `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
-
-        console.log('🔑 Переход на авторизацию:', authUrl);
+        
+        console.log('📱 Пробуем открыть через deep link:', mobileLink);
+        
+        // Пытаемся открыть через deep link
+        window.location.href = mobileLink;
+        
+        // Fallback: если приложение не открылось через 2 секунды
+        setTimeout(() => {
+            console.log('🔄 Deep link не сработал, открываем в браузере');
+            window.location.href = authUrl;
+        }, 2000);
+    } else {
+        console.log('💻 Открываем в браузере');
         window.location.href = authUrl;
     }
+}
 
     // Проверка авторизации
-    checkAuth() {
-        console.log('🔍 Проверка авторизации...');
+checkAuth() {
+    console.log('🔍 Проверка авторизации...');
 
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
+    // Проверяем параметры URL (code от OAuth)
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
 
-        if (code) {
-            console.log('✅ Получен code:', code);
-            this.exchangeCodeForToken(code);
-            return;
-        }
-
-        const token = localStorage.getItem('b24_token');
-        const domain = localStorage.getItem('b24_domain');
-        const refreshToken = localStorage.getItem('b24_refresh_token');
-
-        if (token && domain) {
-            console.log('💾 Сессия из localStorage');
-            this.accessToken = token;
-            this.domain = domain;
-            this.refreshToken = refreshToken;
-            this.getUserInfo();
-        } else {
-            console.log('❌ Нет данных авторизации');
-            this.showAuthSection();
-        }
+    if (code) {
+        console.log('✅ Получен code:', code);
+        // Убираем code из URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+        this.exchangeCodeForToken(code);
+        return;
     }
+
+    // ✅ Проверяем сохраненные токены
+    const token = localStorage.getItem('b24_token');
+    const domain = localStorage.getItem('b24_domain');
+    const refreshToken = localStorage.getItem('b24_refresh_token');
+
+    if (token && domain) {
+        console.log('💾 Восстанавливаем сессию из localStorage');
+        this.accessToken = token;
+        this.domain = domain;
+        this.refreshToken = refreshToken;
+        this.isAuthorized = true;
+        
+        // Показываем интерфейс и загружаем данные пользователя
+        this.showGeoSendSection();
+        this.getUserInfo();
+        return;
+    }
+
+    console.log('❌ Нет данных авторизации');
+    this.showAuthSection();
+}
 
     // Обмен code на access_token — теперь через Worker, client_secret не покидает сервер
     async exchangeCodeForToken(code) {
