@@ -390,75 +390,90 @@ checkAuth() {
     }
 
     async sendGeolocation() {
-        if (!this.currentPosition) {
-            this.showStatus('❌ Местоположение не определено', 'error');
-            return;
+    if (!this.currentPosition) {
+        this.showStatus('❌ Местоположение не определено', 'error');
+        return;
+    }
+
+    const comment = this.elements.comment.value.trim() || 'Отправка геолокации';
+    const timestamp = new Date().toLocaleString('ru-RU');
+
+    this.elements.sendGeoBtn.disabled = true;
+    this.showStatus('⏳ Отправка...', 'loading');
+
+    try {
+        const userName = this.user?.NAME || this.user?.LOGIN || 'Пользователь';
+        const lat = this.currentPosition.lat;
+        const lng = this.currentPosition.lng;
+
+        // Ссылка на Яндекс.Карты (открывается в мобильном приложении или браузере)
+        const yandexMapsLink = `https://yandex.ru/maps/?pt=${lng},${lat}&z=15&l=map`;
+        const yandexMapsAppLink = `yandexmaps://maps.yandex.ru/?pt=${lng},${lat}&z=15&l=map`;
+        
+        // Определяем мобильное устройство
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const mapLink = isMobile ? yandexMapsAppLink : yandexMapsLink;
+
+        let messageText = `📍 Геолокация от ${userName}\n`;
+        messageText += `🕐 Время: ${timestamp}\n`;
+        messageText += `📌 Координаты: ${lat}, ${lng}\n`;
+        messageText += `💬 Комментарий: ${comment}\n`;
+        messageText += `🗺️ Яндекс.Карты: ${mapLink}\n`;
+        messageText += `\n---\n`;
+        messageText += `[🗺️ Открыть на Яндекс.Картах](${yandexMapsLink})`;
+        
+        // Добавляем мини-карту в виде ссылки на статическое изображение (если нужно)
+        // Яндекс не предоставляет статические карты бесплатно, поэтому используем ссылку
+
+        const messageParams = {
+            CHAT_ID: CONFIG.CHAT_ID || null,
+            MESSAGE: messageText
+        };
+
+        if (this.currentPhoto) {
+            const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
+            const base64Only = compressedPhoto.split(',')[1];
+            messageParams.FILES = {
+                n1: ['photo.jpg', base64Only]
+            };
         }
 
-        const comment = this.elements.comment.value.trim() || 'Отправка геолокации';
-        const timestamp = new Date().toLocaleString('ru-RU');
+        console.log('📤 Отправка:', messageParams);
 
-        this.elements.sendGeoBtn.disabled = true;
-        this.showStatus('⏳ Отправка...', 'loading');
+        const data = await this.callRest('im.message.add', messageParams);
+        console.log('📥 Ответ:', data);
 
-        try {
-            const userName = this.user?.NAME || this.user?.LOGIN || 'Пользователь';
-
-            let messageText = `📍 Геолокация от ${userName}\n`;
-            messageText += `🕐 Время: ${timestamp}\n`;
-            messageText += `📌 Координаты: ${this.currentPosition.lat}, ${this.currentPosition.lng}\n`;
-            messageText += `💬 Комментарий: ${comment}\n`;
-            messageText += `🔗 Карта: https://www.openstreetmap.org/?mlat=${this.currentPosition.lat}&mlon=${this.currentPosition.lng}&zoom=15`;
-
-            const messageParams = {
-                CHAT_ID: CONFIG.CHAT_ID || null,
-                MESSAGE: messageText
-            };
-
-            if (this.currentPhoto) {
-                const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
-                // Формат FILES у Bitrix24: { "n1": ["имя_файла.jpg", "base64-без-префикса"] }
-                const base64Only = compressedPhoto.split(',')[1];
-                messageParams.FILES = {
-                    n1: ['photo.jpg', base64Only]
-                };
-            }
-
-            console.log('📤 Отправка:', messageParams);
-
-            const data = await this.callRest('im.message.add', messageParams);
-            console.log('📥 Ответ:', data);
-
-            if (data.result) {
-                this.showStatus('✅ Геолокация успешно отправлена в чат!', 'success');
-                this.elements.comment.value = '';
-                this.removePhoto();
-
-                this.saveToHistory({
-                    time: timestamp,
-                    comment: comment,
-                    coords: this.currentPosition,
-                    photo: this.currentPhoto
-                });
-                this.loadHistory();
-            } else {
-                throw new Error(data.error_description || data.error || 'Ошибка отправки');
-            }
-        } catch (error) {
-            console.error('❌ Ошибка:', error);
-            this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
+        if (data.result) {
+            this.showStatus('✅ Геолокация успешно отправлена в чат!', 'success');
+            this.elements.comment.value = '';
+            this.removePhoto();
 
             this.saveToHistory({
                 time: timestamp,
-                comment: comment + ' (не отправлено)',
+                comment: comment,
                 coords: this.currentPosition,
                 photo: this.currentPhoto,
-                error: error.message
+                mapLink: mapLink
             });
-        } finally {
-            this.elements.sendGeoBtn.disabled = false;
+            this.loadHistory();
+        } else {
+            throw new Error(data.error_description || data.error || 'Ошибка отправки');
         }
+    } catch (error) {
+        console.error('❌ Ошибка:', error);
+        this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
+
+        this.saveToHistory({
+            time: timestamp,
+            comment: comment + ' (не отправлено)',
+            coords: this.currentPosition,
+            photo: this.currentPhoto,
+            error: error.message
+        });
+    } finally {
+        this.elements.sendGeoBtn.disabled = false;
     }
+}
 
     compressImage(dataUrl, maxWidth, maxHeight) {
         return new Promise((resolve, reject) => {
@@ -514,26 +529,37 @@ checkAuth() {
     }
 
     renderHistory(history) {
-        const list = this.elements.historyList;
-        if (!list) return;
+    const list = this.elements.historyList;
+    if (!list) return;
 
-        if (history.length === 0) {
-            list.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">История отправок пуста</p>';
-            return;
-        }
+    if (history.length === 0) {
+        list.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">История отправок пуста</p>';
+        return;
+    }
 
-        list.innerHTML = history.map(item => `
+    list.innerHTML = history.map(item => {
+        const lat = item.coords?.lat;
+        const lng = item.coords?.lng;
+        const mapLink = lat && lng ? 
+            `https://yandex.ru/maps/?pt=${lng},${lat}&z=15&l=map` : 
+            '#';
+        
+        return `
             <div class="history-item">
                 <div class="time">${item.time || 'Время не указано'}</div>
                 <div class="content">
                     <div class="comment">${item.comment || 'Без комментария'}</div>
-                    <div class="coords">📍 ${item.coords ? `${item.coords.lat.toFixed(6)}, ${item.coords.lng.toFixed(6)}` : 'Координаты не указаны'}</div>
+                    <div class="coords">
+                        📍 ${lat && lng ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Координаты не указаны'}
+                        ${lat && lng ? `<a href="${mapLink}" target="_blank" style="color:#2c3e7a;margin-left:8px;">🗺️ Яндекс</a>` : ''}
+                    </div>
                     ${item.photo ? `<img src="${item.photo}" alt="Фото" class="photo" loading="lazy">` : ''}
                     ${item.error ? `<div style="color:red;font-size:12px;margin-top:4px;">⚠️ ${item.error}</div>` : ''}
                 </div>
             </div>
-        `).join('');
-    }
+        `;
+    }).join('');
+}
 
     switchTab(tab) {
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
