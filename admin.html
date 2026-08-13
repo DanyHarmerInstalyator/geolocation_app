@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель - Геолокация</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .admin-container {
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .admin-header {
+            background: linear-gradient(135deg, #2c3e7a 0%, #1a237e 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .stat-card .number {
+            font-size: 28px;
+            font-weight: 700;
+            color: #2c3e7a;
+        }
+        
+        .stat-card .label {
+            color: #666;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .employee-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        
+        .employee-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .employee-name {
+            font-weight: 600;
+            font-size: 18px;
+        }
+        
+        .employee-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .employee-moves {
+            margin-top: 12px;
+        }
+        
+        .move-item {
+            display: flex;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        
+        .move-item .time {
+            color: #2c3e7a;
+            font-weight: 500;
+            min-width: 80px;
+        }
+        
+        .move-item .comment {
+            flex: 1;
+        }
+        
+        .move-item .coords {
+            color: #888;
+            font-size: 12px;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filters input, .filters select {
+            padding: 10px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        .filters input:focus, .filters select:focus {
+            outline: none;
+            border-color: #2c3e7a;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-container">
+        <div class="admin-header">
+            <h1>👥 Админ-панель</h1>
+            <p>Отслеживание перемещений сотрудников</p>
+        </div>
+        
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="number" id="totalEmployees">0</div>
+                <div class="label">Всего сотрудников</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="totalMoves">0</div>
+                <div class="label">Всего перемещений</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="todayMoves">0</div>
+                <div class="label">Сегодня</div>
+            </div>
+        </div>
+        
+        <div class="filters">
+            <input type="date" id="dateFilter" value="2026-08-13">
+            <select id="employeeFilter">
+                <option value="all">Все сотрудники</option>
+            </select>
+            <button id="applyFiltersBtn" class="btn btn-primary" style="width:auto;padding:10px 24px;">Применить</button>
+        </div>
+        
+        <div id="employeesList"></div>
+    </div>
+    
+    <script type="module" src="admin.js"></script>
+</body>
+</html>

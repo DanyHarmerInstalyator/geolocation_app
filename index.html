@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Геолокация Битрикс24</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Шапка -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>📍 Геолокация</h1>
+                <div id="userInfo" class="user-info hidden">
+                    <span id="userName">Пользователь</span>
+                    <img id="userAvatar" src="" alt="Avatar" class="avatar">
+                </div>
+            </div>
+        </header>
+
+        <!-- Основной контент -->
+        <main class="app-content">
+            <!-- Состояние авторизации -->
+            <div id="authSection" class="section">
+                <div class="auth-card">
+                    <div class="auth-icon">🔐</div>
+                    <h2>Требуется авторизация</h2>
+                    <p>Для работы с приложением необходимо авторизоваться через Битрикс24</p>
+                    <button id="authBtn" class="btn btn-primary btn-large">
+                        🔑 Авторизоваться
+                    </button>
+                    <div class="auth-info">
+                        <small>Безопасная авторизация через OAuth 2.0</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Форма отправки геолокации -->
+            <div id="geoSendSection" class="section hidden">
+                <div class="geo-card">
+                    <div class="geo-status">
+                        <div class="status-indicator" id="geoStatus">
+                            <span class="dot"></span>
+                            <span id="geoStatusText">Определение местоположения...</span>
+                        </div>
+                        <div id="geoCoords" class="coords-info hidden">
+                            <small>Широта: <span id="lat">-</span></small>
+                            <small>Долгота: <span id="lng">-</span></small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="comment">Комментарий</label>
+                        <textarea id="comment" 
+                                  placeholder="Например: Прибыл в офис, убыл на объект..."
+                                  rows="3"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Фото</label>
+                        <div class="photo-upload">
+                            <input type="file" id="photoInput" accept="image/*" capture="environment">
+                            <label for="photoInput" class="photo-label">
+                                <span>📷 Добавить фото</span>
+                            </label>
+                            <div id="photoPreview" class="photo-preview hidden">
+                                <img id="previewImg" src="" alt="Preview">
+                                <button id="removePhotoBtn" class="btn-remove">✕</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="sendGeoBtn" class="btn btn-success btn-large" disabled>
+                        📤 Отправить геолокацию
+                    </button>
+
+                    <div id="sendStatus" class="send-status hidden"></div>
+                </div>
+            </div>
+
+            <!-- История -->
+            <div id="historySection" class="section hidden">
+                <div class="history-card">
+                    <h3>📋 История отправок</h3>
+                    <div id="historyList" class="history-list"></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Нижняя навигация -->
+        <nav class="bottom-nav">
+            <button id="navSend" class="nav-btn">
+                <span class="nav-icon">📍</span>
+                <span class="nav-label">Отправить</span>
+            </button>
+            <button id="navHistory" class="nav-btn">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">История</span>
+            </button>
+            <button id="navAdmin" class="nav-btn">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Сотрудники</span>
+            </button>
+            <button id="navAuth" class="nav-btn hidden">
+                <span class="nav-icon">🔑</span>
+                <span class="nav-label">Войти</span>
+            </button>
+            <button id="logoutBtn" class="nav-btn hidden">
+                <span class="nav-icon">🚪</span>
+                <span class="nav-label">Выйти</span>
+            </button>
+        </nav>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
