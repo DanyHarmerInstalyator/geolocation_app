@@ -71,16 +71,50 @@ class GeolocationApp {
     // Схемы вида bitrix24://oauth/authorize/ не существует — такая ссылка
     // просто открывает приложение "в пустоту", без передачи ему контекста
     // авторизации, поэтому оно ничего не показывает и ничего не подтверждает.
-    authorize() {
-        const authUrl =
-            `https://hdl.bitrix24.ru/oauth/authorize/` +
-            `?client_id=${CONFIG.CLIENT_ID}` +
-            `&response_type=code` +
-            `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}`;
+   // app.js — только измененные методы
 
-        console.log('🔑 Переход на авторизацию:', authUrl);
-        window.location.href = authUrl;
+// 🔑 Авторизация через OAuth с пуш-подтверждением
+authorize() {
+    const authUrl =
+        `https://hdl.bitrix24.ru/oauth/authorize/` +
+        `?client_id=${CONFIG.CLIENT_ID}` +
+        `&response_type=code` +
+        `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
+        `&approval_prompt=auto`;  // Включает пуш-подтверждение
+
+    console.log('🔑 Переход на авторизацию с пуш-подтверждением:', authUrl);
+    window.location.href = authUrl;
+}
+
+showAuthSection() {
+    this.elements.authSection.classList.remove('hidden');
+    this.elements.geoSendSection.classList.add('hidden');
+    this.elements.historySection.classList.add('hidden');
+    this.elements.userInfo.classList.add('hidden');
+    this.elements.sendGeoBtn.disabled = true;
+
+    const authBtn = this.elements.authBtn;
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        authBtn.textContent = '📱 Войти через приложение Битрикс24';
+    } else {
+        authBtn.textContent = '🔑 Войти через Битрикс24';
     }
+    authBtn.classList.remove('btn-primary');
+    authBtn.classList.add('btn-success');
+
+    // Обновляем подсказку
+    const infoDiv = document.querySelector('.auth-info');
+    if (infoDiv) {
+        infoDiv.innerHTML = `
+            <small>🔔 После нажатия на кнопку входа:</small><br>
+            <small>📱 На телефон придёт пуш-уведомление для подтверждения</small>
+        `;
+    }
+
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+}
 
     // Проверка авторизации
     checkAuth() {
