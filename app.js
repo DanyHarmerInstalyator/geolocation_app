@@ -372,133 +372,121 @@ class GeolocationApp {
 
     // ==================== ОТПРАВКА ====================
 
-    async sendGeolocation() {
-    if (!this.currentPosition) {
-        this.showStatus('❌ Местоположение не определено', 'error');
-        return;
-    }
-
-    const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
-    const timestamp = new Date().toLocaleString('ru-RU');
-    const lat = this.currentPosition.lat;
-    const lng = this.currentPosition.lng;
-
-    if (this.elements.sendGeoBtn) {
-        this.elements.sendGeoBtn.disabled = true;
-    }
-    this.showStatus('⏳ Отправка...', 'loading');
-
-    try {
-        const userName = this.user?.name || 'Пользователь';
-        const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
-
-        let messageText = `📍 Геолокация от ${userName}\n`;
-        messageText += `🕐 Время: ${timestamp}\n`;
-        messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
-        messageText += `💬 Комментарий: ${comment}\n`;
-        messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
-
-        // ====== ФОРМИРУЕМ ДАННЫЕ ДЛЯ ОТПРАВКИ ======
-        const messageData = {
-            CHAT_ID: CONFIG.CHAT_ID || null,
-            MESSAGE: messageText
-        };
-
-        // ====== ОТПРАВКА ФОТО ======
-        if (this.currentPhoto) {
-            try {
-                // Сжимаем фото
-                const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
-                console.log('📸 Фото сжато, длина:', compressedPhoto.length);
-                
-                // Убираем префикс data:image/jpeg;base64,
-                const base64Only = compressedPhoto.split(',')[1];
-                console.log('📸 Base64 длина:', base64Only?.length || 0);
-                
-                if (base64Only && base64Only.length > 0) {
-                    // Правильный формат FILES для Bitrix24 REST API
-                    messageData.FILES = {
-                        "n0": ["photo.jpg", base64Only]
-                    };
-                    console.log('📸 Фото добавлено в сообщение');
-                } else {
-                    console.warn('⚠️ Не удалось получить base64 из фото');
-                }
-            } catch (photoError) {
-                console.error('❌ Ошибка обработки фото:', photoError);
-                this.showStatus('⚠️ Фото не удалось обработать, отправляю без фото', 'loading');
-                // Продолжаем отправку без фото
-            }
+async sendGeolocation() {
+        if (!this.currentPosition) {
+            this.showStatus('❌ Местоположение не определено', 'error');
+            return;
         }
 
-        console.log('📤 Отправка данных:', {
-            hasPhoto: !!messageData.FILES,
-            messageLength: messageData.MESSAGE.length
-        });
+        const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
+        const timestamp = new Date().toLocaleString('ru-RU');
+        const lat = this.currentPosition.lat;
+        const lng = this.currentPosition.lng;
 
-        // ====== ОТПРАВКА ЧЕРЕЗ ВЕБХУК ======
-        const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(messageData)
-        });
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = true;
+        }
+        this.showStatus('⏳ Отправка...', 'loading');
 
-        const data = await response.json();
-        console.log('📥 Ответ от Битрикс24:', data);
+        try {
+            const userName = this.user?.name || 'Пользователь';
+            const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
 
-        if (data.result) {
-            this.showStatus('✅ Геолокация отправлена!', 'success');
-            if (this.elements.comment) {
-                this.elements.comment.value = '';
+            let messageText = `📍 Геолокация от ${userName}\n`;
+            messageText += `🕐 Время: ${timestamp}\n`;
+            messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
+            messageText += `💬 Комментарий: ${comment}\n`;
+            messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
+
+            let sendOk = false;
+            let sentWithPhoto = false;
+
+            if (this.currentPhoto) {
+                // ====== ЕСТЬ ФОТО: используем im.v2.File.upload ======
+                // Этот метод одним вызовом грузит файл на Диск, прикрепляет
+                // его к чату и отправляет сообщение — то, что раньше пытались
+                // сделать несуществующим параметром FILES у im.message.add.
+                try {
+                    const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
+                    const base64Only = compressedPhoto.split(',')[1]; // без префикса data:image/...;base64,
+
+                    if (base64Only && base64Only.length > 0) {
+                        const uploadResponse = await fetch(`${CONFIG.REST_URL}im.v2.File.upload`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                dialogId: CONFIG.CHAT_ID, // формат: "chatXXX" для чата или "XXX" — ID пользователя
+                                fields: {
+                                    name: `geo_${Date.now()}.jpg`,
+                                    content: base64Only,
+                                    message: messageText,
+                                },
+                            }),
+                        });
+                        const uploadData = await uploadResponse.json();
+                        console.log('📥 Ответ im.v2.File.upload:', uploadData);
+
+                        if (uploadData.result) {
+                            sendOk = true;
+                            sentWithPhoto = true;
+                        } else {
+                            console.warn('⚠️ Загрузка фото не удалась:', uploadData.error_description || uploadData.error);
+                            this.showStatus('⚠️ Фото не отправилось, пробую без фото', 'loading');
+                        }
+                    }
+                } catch (photoError) {
+                    console.error('❌ Ошибка обработки/отправки фото:', photoError);
+                    this.showStatus('⚠️ Фото не удалось обработать, отправляю без фото', 'loading');
+                }
             }
-            this.removePhoto();
 
-            this.saveToHistory({
-                time: timestamp,
-                comment: comment,
-                coords: this.currentPosition,
-                photo: this.currentPhoto
-            });
-            this.loadHistory();
-        } else {
-            // Если ошибка связана с фото, пробуем отправить без фото
-            if (data.error === 'ERROR_FILE_IS_TOO_BIG' || data.error?.includes('file')) {
-                this.showStatus('⚠️ Фото слишком большое, отправляю без фото', 'loading');
-                // Убираем фото и пробуем снова
-                delete messageData.FILES;
-                const retryResponse = await fetch(`${CONFIG.REST_URL}im.message.add`, {
+            if (!sendOk) {
+                // ====== БЕЗ ФОТО (или фото не отправилось выше): обычное сообщение ======
+                const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(messageData)
+                    body: JSON.stringify({
+                        DIALOG_ID: CONFIG.CHAT_ID, // ВАЖНО: параметр называется DIALOG_ID, не CHAT_ID
+                        MESSAGE: messageText,
+                    }),
                 });
-                const retryData = await retryResponse.json();
-                if (retryData.result) {
-                    this.showStatus('✅ Геолокация отправлена (без фото)!', 'success');
-                    this.elements.comment.value = '';
-                    this.removePhoto();
-                    this.saveToHistory({
-                        time: timestamp,
-                        comment: comment + ' (без фото)',
-                        coords: this.currentPosition,
-                        photo: null
-                    });
-                    this.loadHistory();
-                    return;
+                const data = await response.json();
+                console.log('📥 Ответ im.message.add:', data);
+
+                if (typeof data.result !== 'undefined') {
+                    sendOk = true;
+                } else {
+                    throw new Error(data.error_description || data.error || 'Ошибка отправки');
                 }
             }
-            throw new Error(data.error_description || data.error || 'Ошибка отправки');
-        }
-    } catch (error) {
-        console.error('❌ Ошибка:', error);
-        this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
-    } finally {
-        if (this.elements.sendGeoBtn) {
-            this.elements.sendGeoBtn.disabled = false;
+
+            if (sendOk) {
+                this.showStatus(
+                    sentWithPhoto ? '✅ Геолокация и фото отправлены!' : '✅ Геолокация отправлена!',
+                    'success'
+                );
+                if (this.elements.comment) {
+                    this.elements.comment.value = '';
+                }
+
+                this.saveToHistory({
+                    time: timestamp,
+                    comment: comment,
+                    coords: this.currentPosition,
+                    photo: sentWithPhoto ? this.currentPhoto : null,
+                });
+                this.removePhoto();
+                this.loadHistory();
+            }
+        } catch (error) {
+            console.error('❌ Ошибка:', error);
+            this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
+        } finally {
+            if (this.elements.sendGeoBtn) {
+                this.elements.sendGeoBtn.disabled = false;
+            }
         }
     }
-}
 
     compressImage(dataUrl, maxWidth, maxHeight) {
     return new Promise((resolve, reject) => {
