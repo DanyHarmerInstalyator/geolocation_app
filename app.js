@@ -373,115 +373,176 @@ class GeolocationApp {
     // ==================== ОТПРАВКА ====================
 
     async sendGeolocation() {
-        if (!this.currentPosition) {
-            this.showStatus('❌ Местоположение не определено', 'error');
-            return;
-        }
+    if (!this.currentPosition) {
+        this.showStatus('❌ Местоположение не определено', 'error');
+        return;
+    }
 
-        const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
-        const timestamp = new Date().toLocaleString('ru-RU');
-        const lat = this.currentPosition.lat;
-        const lng = this.currentPosition.lng;
+    const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
+    const timestamp = new Date().toLocaleString('ru-RU');
+    const lat = this.currentPosition.lat;
+    const lng = this.currentPosition.lng;
 
-        if (this.elements.sendGeoBtn) {
-            this.elements.sendGeoBtn.disabled = true;
-        }
-        this.showStatus('⏳ Отправка...', 'loading');
+    if (this.elements.sendGeoBtn) {
+        this.elements.sendGeoBtn.disabled = true;
+    }
+    this.showStatus('⏳ Отправка...', 'loading');
 
-        try {
-            const userName = this.user?.name || 'Пользователь';
-            const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
+    try {
+        const userName = this.user?.name || 'Пользователь';
+        const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
 
-            let messageText = `📍 Геолокация от ${userName}\n`;
-            messageText += `🕐 Время: ${timestamp}\n`;
-            messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
-            messageText += `💬 Комментарий: ${comment}\n`;
-            messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
+        let messageText = `📍 Геолокация от ${userName}\n`;
+        messageText += `🕐 Время: ${timestamp}\n`;
+        messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
+        messageText += `💬 Комментарий: ${comment}\n`;
+        messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
 
-            const messageData = {
-                CHAT_ID: CONFIG.CHAT_ID || null,
-                MESSAGE: messageText
-            };
+        // ====== ФОРМИРУЕМ ДАННЫЕ ДЛЯ ОТПРАВКИ ======
+        const messageData = {
+            CHAT_ID: CONFIG.CHAT_ID || null,
+            MESSAGE: messageText
+        };
 
-            if (this.currentPhoto) {
+        // ====== ОТПРАВКА ФОТО ======
+        if (this.currentPhoto) {
+            try {
+                // Сжимаем фото
                 const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
+                console.log('📸 Фото сжато, длина:', compressedPhoto.length);
+                
+                // Убираем префикс data:image/jpeg;base64,
                 const base64Only = compressedPhoto.split(',')[1];
-                messageData.FILES = {
-                    n1: ['photo.jpg', base64Only]
-                };
-            }
-
-            console.log('📤 Отправка:', messageData);
-
-            const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(messageData)
-            });
-
-            const data = await response.json();
-
-            if (data.result) {
-                this.showStatus('✅ Геолокация отправлена!', 'success');
-                if (this.elements.comment) {
-                    this.elements.comment.value = '';
+                console.log('📸 Base64 длина:', base64Only?.length || 0);
+                
+                if (base64Only && base64Only.length > 0) {
+                    // Правильный формат FILES для Bitrix24 REST API
+                    messageData.FILES = {
+                        "n0": ["photo.jpg", base64Only]
+                    };
+                    console.log('📸 Фото добавлено в сообщение');
+                } else {
+                    console.warn('⚠️ Не удалось получить base64 из фото');
                 }
-                this.removePhoto();
+            } catch (photoError) {
+                console.error('❌ Ошибка обработки фото:', photoError);
+                this.showStatus('⚠️ Фото не удалось обработать, отправляю без фото', 'loading');
+                // Продолжаем отправку без фото
+            }
+        }
 
-                this.saveToHistory({
-                    time: timestamp,
-                    comment: comment,
-                    coords: this.currentPosition,
-                    photo: this.currentPhoto
+        console.log('📤 Отправка данных:', {
+            hasPhoto: !!messageData.FILES,
+            messageLength: messageData.MESSAGE.length
+        });
+
+        // ====== ОТПРАВКА ЧЕРЕЗ ВЕБХУК ======
+        const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(messageData)
+        });
+
+        const data = await response.json();
+        console.log('📥 Ответ от Битрикс24:', data);
+
+        if (data.result) {
+            this.showStatus('✅ Геолокация отправлена!', 'success');
+            if (this.elements.comment) {
+                this.elements.comment.value = '';
+            }
+            this.removePhoto();
+
+            this.saveToHistory({
+                time: timestamp,
+                comment: comment,
+                coords: this.currentPosition,
+                photo: this.currentPhoto
+            });
+            this.loadHistory();
+        } else {
+            // Если ошибка связана с фото, пробуем отправить без фото
+            if (data.error === 'ERROR_FILE_IS_TOO_BIG' || data.error?.includes('file')) {
+                this.showStatus('⚠️ Фото слишком большое, отправляю без фото', 'loading');
+                // Убираем фото и пробуем снова
+                delete messageData.FILES;
+                const retryResponse = await fetch(`${CONFIG.REST_URL}im.message.add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(messageData)
                 });
-                this.loadHistory();
-            } else {
-                throw new Error(data.error_description || 'Ошибка отправки');
+                const retryData = await retryResponse.json();
+                if (retryData.result) {
+                    this.showStatus('✅ Геолокация отправлена (без фото)!', 'success');
+                    this.elements.comment.value = '';
+                    this.removePhoto();
+                    this.saveToHistory({
+                        time: timestamp,
+                        comment: comment + ' (без фото)',
+                        coords: this.currentPosition,
+                        photo: null
+                    });
+                    this.loadHistory();
+                    return;
+                }
             }
-        } catch (error) {
-            console.error('❌ Ошибка:', error);
-            this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
-        } finally {
-            if (this.elements.sendGeoBtn) {
-                this.elements.sendGeoBtn.disabled = false;
-            }
+            throw new Error(data.error_description || data.error || 'Ошибка отправки');
+        }
+    } catch (error) {
+        console.error('❌ Ошибка:', error);
+        this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
+    } finally {
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = false;
         }
     }
+}
 
     compressImage(dataUrl, maxWidth, maxHeight) {
-        return new Promise((resolve, reject) => {
-            try {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
+    return new Promise((resolve, reject) => {
+        try {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
 
-                    if (width > height) {
-                        if (width > maxWidth) {
-                            height = (height * maxWidth) / width;
-                            width = maxWidth;
-                        }
-                    } else {
-                        if (height > maxHeight) {
-                            width = (width * maxHeight) / height;
-                            height = maxHeight;
-                        }
+                // Сохраняем пропорции
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
                     }
+                } else {
+                    if (height > maxHeight) {
+                        width = Math.round((width * maxHeight) / height);
+                        height = maxHeight;
+                    }
+                }
 
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', 0.7));
-                };
-                img.onerror = () => reject(new Error('Ошибка загрузки изображения'));
-                img.src = dataUrl;
-            } catch (error) {
-                reject(error);
-            }
-        });
-    }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Конвертируем в JPEG с качеством 0.7
+                const compressed = canvas.toDataURL('image/jpeg', 0.7);
+                console.log(`📸 Сжато: ${img.width}x${img.height} → ${width}x${height}, размер: ${Math.round(compressed.length / 1024)}KB`);
+                resolve(compressed);
+            };
+            img.onerror = () => {
+                console.error('❌ Ошибка загрузки изображения для сжатия');
+                reject(new Error('Ошибка загрузки изображения'));
+            };
+            img.src = dataUrl;
+        } catch (error) {
+            console.error('❌ Ошибка сжатия:', error);
+            reject(error);
+        }
+    });
+}
 
     // ==================== ИСТОРИЯ ====================
 
