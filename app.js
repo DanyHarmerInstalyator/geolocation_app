@@ -28,6 +28,7 @@ class GeolocationApp {
             userName: document.getElementById('userName'),
             userDisplay: document.getElementById('userDisplay'),
             userAvatar: document.getElementById('userAvatar'),
+            userAvatarSmall: document.getElementById('userAvatarSmall'),
 
             loginName: document.getElementById('loginName'),
             loginPassword: document.getElementById('loginPassword'),
@@ -59,17 +60,46 @@ class GeolocationApp {
     }
 
     initializeEventListeners() {
-        this.elements.loginBtn.addEventListener('click', () => this.login());
-        this.elements.registerBtn.addEventListener('click', () => this.register());
-        this.elements.sendGeoBtn.addEventListener('click', () => this.sendGeolocation());
-        this.elements.logoutBtn.addEventListener('click', () => this.logout());
-        this.elements.photoInput.addEventListener('change', (e) => this.handlePhotoUpload(e));
-        this.elements.removePhotoBtn.addEventListener('click', () => this.removePhoto());
-        this.elements.navSend.addEventListener('click', () => this.switchTab('send'));
-        this.elements.navHistory.addEventListener('click', () => this.switchTab('history'));
-        this.elements.navAdmin.addEventListener('click', () => this.openAdminPanel());
-        this.elements.switchToRegister.addEventListener('click', () => this.switchForm('register'));
-        this.elements.switchToLogin.addEventListener('click', () => this.switchForm('login'));
+        // Проверяем наличие элементов перед добавлением слушателей
+        if (this.elements.loginBtn) {
+            this.elements.loginBtn.addEventListener('click', () => this.login());
+        }
+        if (this.elements.registerBtn) {
+            this.elements.registerBtn.addEventListener('click', () => this.register());
+        }
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.addEventListener('click', () => this.sendGeolocation());
+        }
+        if (this.elements.logoutBtn) {
+            this.elements.logoutBtn.addEventListener('click', () => this.logout());
+        }
+        if (this.elements.photoInput) {
+            this.elements.photoInput.addEventListener('change', (e) => this.handlePhotoUpload(e));
+        }
+        if (this.elements.removePhotoBtn) {
+            this.elements.removePhotoBtn.addEventListener('click', () => this.removePhoto());
+        }
+        if (this.elements.navSend) {
+            this.elements.navSend.addEventListener('click', () => this.switchTab('send'));
+        }
+        if (this.elements.navHistory) {
+            this.elements.navHistory.addEventListener('click', () => this.switchTab('history'));
+        }
+        if (this.elements.navAdmin) {
+            this.elements.navAdmin.addEventListener('click', () => this.openAdminPanel());
+        }
+        if (this.elements.switchToRegister) {
+            this.elements.switchToRegister.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.switchForm('register');
+            });
+        }
+        if (this.elements.switchToLogin) {
+            this.elements.switchToLogin.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.switchForm('login');
+            });
+        }
     }
 
     // ==================== АВТОРИЗАЦИЯ ====================
@@ -98,9 +128,9 @@ class GeolocationApp {
 
     // Регистрация
     register() {
-        const name = this.elements.registerName.value.trim();
-        const email = this.elements.registerEmail.value.trim();
-        const password = this.elements.registerPassword.value.trim();
+        const name = this.elements.registerName?.value?.trim() || '';
+        const email = this.elements.registerEmail?.value?.trim() || '';
+        const password = this.elements.registerPassword?.value?.trim() || '';
 
         if (!name || !email || !password) {
             this.showStatus('❌ Заполните все поля', 'error');
@@ -145,8 +175,8 @@ class GeolocationApp {
 
     // Вход
     login() {
-        const name = this.elements.loginName.value.trim();
-        const password = this.elements.loginPassword.value.trim();
+        const name = this.elements.loginName?.value?.trim() || '';
+        const password = this.elements.loginPassword?.value?.trim() || '';
 
         if (!name || !password) {
             this.showStatus('❌ Введите имя и пароль', 'error');
@@ -181,35 +211,52 @@ class GeolocationApp {
         const registerForm = document.getElementById('registerForm');
         
         if (form === 'register') {
-            loginForm.classList.add('hidden');
-            registerForm.classList.remove('hidden');
+            if (loginForm) loginForm.classList.add('hidden');
+            if (registerForm) registerForm.classList.remove('hidden');
         } else {
-            loginForm.classList.remove('hidden');
-            registerForm.classList.add('hidden');
+            if (loginForm) loginForm.classList.remove('hidden');
+            if (registerForm) registerForm.classList.add('hidden');
         }
     }
 
     updateUserInfo() {
         if (!this.user) return;
         
-        this.elements.userName.textContent = this.user.name;
-        this.elements.userDisplay.textContent = this.user.name;
+        if (this.elements.userName) {
+            this.elements.userName.textContent = this.user.name;
+        }
+        if (this.elements.userDisplay) {
+            this.elements.userDisplay.textContent = this.user.name;
+        }
         
         const initials = this.user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-        this.elements.userAvatar.src = `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%232c3e7a"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="white" font-size="40" font-family="Arial"%3E${initials}%3C/text%3E%3C/svg%3E`;
+        const avatarData = `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%232c3e7a"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="white" font-size="40" font-family="Arial"%3E${initials}%3C/text%3E%3C/svg%3E`;
         
-        this.elements.userInfo?.classList.remove('hidden');
+        if (this.elements.userAvatar) {
+            this.elements.userAvatar.src = avatarData;
+        }
+        if (this.elements.userAvatarSmall) {
+            this.elements.userAvatarSmall.src = avatarData;
+        }
+        
+        if (this.elements.userInfo) {
+            this.elements.userInfo.classList.remove('hidden');
+        }
     }
 
     // ==================== ГЕОЛОКАЦИЯ ====================
 
     startGeolocation() {
         if (!navigator.geolocation) {
-            this.elements.geoStatusText.textContent = '❌ Геолокация не поддерживается';
+            if (this.elements.geoStatusText) {
+                this.elements.geoStatusText.textContent = '❌ Геолокация не поддерживается';
+            }
             return;
         }
 
-        this.elements.geoStatusText.textContent = '📍 Определение местоположения...';
+        if (this.elements.geoStatusText) {
+            this.elements.geoStatusText.textContent = '📍 Определение местоположения...';
+        }
 
         this.watchId = navigator.geolocation.watchPosition(
             (position) => this.handlePosition(position),
@@ -225,14 +272,24 @@ class GeolocationApp {
             accuracy: position.coords.accuracy
         };
 
-        this.elements.geoStatusText.textContent = '✅ Местоположение определено';
-        const dot = this.elements.geoStatus.querySelector('.dot');
+        if (this.elements.geoStatusText) {
+            this.elements.geoStatusText.textContent = '✅ Местоположение определено';
+        }
+        const dot = this.elements.geoStatus?.querySelector('.dot');
         if (dot) dot.classList.add('active');
-        this.elements.geoCoords.classList.remove('hidden');
-        this.elements.lat.textContent = this.currentPosition.lat.toFixed(6);
-        this.elements.lng.textContent = this.currentPosition.lng.toFixed(6);
+        if (this.elements.geoCoords) {
+            this.elements.geoCoords.classList.remove('hidden');
+        }
+        if (this.elements.lat) {
+            this.elements.lat.textContent = this.currentPosition.lat.toFixed(6);
+        }
+        if (this.elements.lng) {
+            this.elements.lng.textContent = this.currentPosition.lng.toFixed(6);
+        }
 
-        this.elements.sendGeoBtn.disabled = false;
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = false;
+        }
     }
 
     handleGeoError(error) {
@@ -251,8 +308,12 @@ class GeolocationApp {
                 break;
         }
 
-        this.elements.geoStatusText.textContent = message;
-        this.elements.sendGeoBtn.disabled = true;
+        if (this.elements.geoStatusText) {
+            this.elements.geoStatusText.textContent = message;
+        }
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = true;
+        }
     }
 
     // ==================== ФОТО ====================
@@ -263,34 +324,50 @@ class GeolocationApp {
 
         if (!file.type.startsWith('image/')) {
             alert('Пожалуйста, выберите изображение');
-            this.elements.photoInput.value = '';
+            if (this.elements.photoInput) {
+                this.elements.photoInput.value = '';
+            }
             return;
         }
 
         if (file.size > 5 * 1024 * 1024) {
             alert('Файл слишком большой. Максимальный размер 5MB');
-            this.elements.photoInput.value = '';
+            if (this.elements.photoInput) {
+                this.elements.photoInput.value = '';
+            }
             return;
         }
 
         const reader = new FileReader();
         reader.onload = (e) => {
             this.currentPhoto = e.target.result;
-            this.elements.previewImg.src = this.currentPhoto;
-            this.elements.photoPreview.classList.remove('hidden');
-            this.elements.photoInput.value = '';
+            if (this.elements.previewImg) {
+                this.elements.previewImg.src = this.currentPhoto;
+            }
+            if (this.elements.photoPreview) {
+                this.elements.photoPreview.classList.remove('hidden');
+            }
+            if (this.elements.photoInput) {
+                this.elements.photoInput.value = '';
+            }
         };
         reader.onerror = () => {
             alert('Ошибка чтения файла');
-            this.elements.photoInput.value = '';
+            if (this.elements.photoInput) {
+                this.elements.photoInput.value = '';
+            }
         };
         reader.readAsDataURL(file);
     }
 
     removePhoto() {
         this.currentPhoto = null;
-        this.elements.photoPreview.classList.add('hidden');
-        this.elements.previewImg.src = '';
+        if (this.elements.photoPreview) {
+            this.elements.photoPreview.classList.add('hidden');
+        }
+        if (this.elements.previewImg) {
+            this.elements.previewImg.src = '';
+        }
     }
 
     // ==================== ОТПРАВКА ====================
@@ -301,12 +378,14 @@ class GeolocationApp {
             return;
         }
 
-        const comment = this.elements.comment.value.trim() || 'Отправка геолокации';
+        const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
         const timestamp = new Date().toLocaleString('ru-RU');
         const lat = this.currentPosition.lat;
         const lng = this.currentPosition.lng;
 
-        this.elements.sendGeoBtn.disabled = true;
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = true;
+        }
         this.showStatus('⏳ Отправка...', 'loading');
 
         try {
@@ -344,7 +423,9 @@ class GeolocationApp {
 
             if (data.result) {
                 this.showStatus('✅ Геолокация отправлена!', 'success');
-                this.elements.comment.value = '';
+                if (this.elements.comment) {
+                    this.elements.comment.value = '';
+                }
                 this.removePhoto();
 
                 this.saveToHistory({
@@ -361,7 +442,9 @@ class GeolocationApp {
             console.error('❌ Ошибка:', error);
             this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
         } finally {
-            this.elements.sendGeoBtn.disabled = false;
+            if (this.elements.sendGeoBtn) {
+                this.elements.sendGeoBtn.disabled = false;
+            }
         }
     }
 
@@ -458,13 +541,25 @@ class GeolocationApp {
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
 
         if (tab === 'send') {
-            this.elements.navSend.classList.add('active');
-            this.elements.geoSendSection.classList.remove('hidden');
-            this.elements.historySection.classList.add('hidden');
+            if (this.elements.navSend) {
+                this.elements.navSend.classList.add('active');
+            }
+            if (this.elements.geoSendSection) {
+                this.elements.geoSendSection.classList.remove('hidden');
+            }
+            if (this.elements.historySection) {
+                this.elements.historySection.classList.add('hidden');
+            }
         } else if (tab === 'history') {
-            this.elements.navHistory.classList.add('active');
-            this.elements.geoSendSection.classList.add('hidden');
-            this.elements.historySection.classList.remove('hidden');
+            if (this.elements.navHistory) {
+                this.elements.navHistory.classList.add('active');
+            }
+            if (this.elements.geoSendSection) {
+                this.elements.geoSendSection.classList.add('hidden');
+            }
+            if (this.elements.historySection) {
+                this.elements.historySection.classList.remove('hidden');
+            }
             this.loadHistory();
         }
     }
@@ -489,19 +584,37 @@ class GeolocationApp {
     }
 
     showAuthSection() {
-        this.elements.authSection.classList.remove('hidden');
-        this.elements.geoSendSection.classList.add('hidden');
-        this.elements.historySection.classList.add('hidden');
-        if (this.elements.userInfo) this.elements.userInfo.classList.add('hidden');
-        this.elements.sendGeoBtn.disabled = true;
+        if (this.elements.authSection) {
+            this.elements.authSection.classList.remove('hidden');
+        }
+        if (this.elements.geoSendSection) {
+            this.elements.geoSendSection.classList.add('hidden');
+        }
+        if (this.elements.historySection) {
+            this.elements.historySection.classList.add('hidden');
+        }
+        if (this.elements.userInfo) {
+            this.elements.userInfo.classList.add('hidden');
+        }
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = true;
+        }
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     }
 
     showGeoSendSection() {
-        this.elements.authSection.classList.add('hidden');
-        this.elements.geoSendSection.classList.remove('hidden');
-        this.elements.historySection.classList.add('hidden');
-        this.elements.navSend.classList.add('active');
+        if (this.elements.authSection) {
+            this.elements.authSection.classList.add('hidden');
+        }
+        if (this.elements.geoSendSection) {
+            this.elements.geoSendSection.classList.remove('hidden');
+        }
+        if (this.elements.historySection) {
+            this.elements.historySection.classList.add('hidden');
+        }
+        if (this.elements.navSend) {
+            this.elements.navSend.classList.add('active');
+        }
     }
 
     logout() {

@@ -1,11 +1,11 @@
+// config.js
 export const CONFIG = {
-    CLIENT_ID: 'local.6a7d854ea95905.96844738',
-    REDIRECT_URI: 'https://danyharmerinstalyator.github.io/geolocation_app/index.html',
+    // Вебхук Битрикс24 (только для отправки сообщений)
+    REST_URL: 'https://hdl.bitrix24.ru/rest/1673/z328ka0pgwjkzgf5/',
     
-    
-    API_BASE: 'https://geo-proxy.danyharmor.workers.dev',
-    
+    // ID чата
     CHAT_ID: 51255,
+    
     GEOLOCATION: {
         enableHighAccuracy: true,
         timeout: 15000,
