@@ -682,9 +682,8 @@ textarea:focus {
 
 /* ---------- ЛОГОТИП В ШАПКЕ ---------- */
 .header-logo {
-    height: 40px;
+    height: 36px;
     width: auto;
     display: block;
-    max-height: 44px;
     object-fit: contain;
 }

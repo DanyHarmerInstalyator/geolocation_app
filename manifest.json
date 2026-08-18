@@ -5,19 +5,19 @@
     "start_url": "/geolocation_app/",
     "display": "standalone",
     "orientation": "portrait",
-    "background_color": "#ffffff",
+    "background_color": "#FF7300",
     "theme_color": "#FF7300",
     "icons": [
         {
-            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 194 221'%3E%3Crect width='194' height='221' fill='white'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 86.8541L0.0241885 221L43.9943 201.05V66.9282L0 86.8541ZM61.4811 59.6822L149.494 164.216V19.9262L193.488 0V192.91L132.999 221L61.4811 133.808V59.6822Z' fill='%23000000'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 19.9262L0.012093 44.1034L0.024186 68.2807L43.9943 48.306V0L0 19.9262Z' fill='%23FF7300'/%3E%3C/svg%3E",
+            "src": "image/icon-192.png",
             "sizes": "192x192",
-            "type": "image/svg+xml",
+            "type": "image/png",
             "purpose": "any maskable"
         },
         {
-            "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 194 221'%3E%3Crect width='194' height='221' fill='white'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 86.8541L0.0241885 221L43.9943 201.05V66.9282L0 86.8541ZM61.4811 59.6822L149.494 164.216V19.9262L193.488 0V192.91L132.999 221L61.4811 133.808V59.6822Z' fill='%23000000'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 19.9262L0.012093 44.1034L0.024186 68.2807L43.9943 48.306V0L0 19.9262Z' fill='%23FF7300'/%3E%3C/svg%3E",
+            "src": "image/icon-512.png",
             "sizes": "512x512",
-            "type": "image/svg+xml",
+            "type": "image/png",
             "purpose": "any maskable"
         }
     ]
