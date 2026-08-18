@@ -4,7 +4,7 @@ export const CONFIG = {
     REST_URL: 'https://hdl.bitrix24.ru/rest/1673/z328ka0pgwjkzgf5/',
     
     // ID чата
-    CHAT_ID: 51255,
+    CHAT_ID: 'chat51255',
     
     GEOLOCATION: {
         enableHighAccuracy: true,
