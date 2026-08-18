@@ -4,14 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Геолокация сотрудников</title>
-    <link rel="stylesheet" href="style.css">
+    
+    <!-- ====== FAVICON ====== -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 194 221'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 86.8541L0.0241885 221L43.9943 201.05V66.9282L0 86.8541ZM61.4811 59.6822L149.494 164.216V19.9262L193.488 0V192.91L132.999 221L61.4811 133.808V59.6822Z' fill='%23FF7300'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 19.9262L0.012093 44.1034L0.024186 68.2807L43.9943 48.306V0L0 19.9262Z' fill='%23000000'/%3E%3C/svg%3E">
+    
+    <!-- ====== APPLE TOUCH ICON (iPhone, iPad) ====== -->
+    <link rel="apple-touch-icon" sizes="180x180" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 194 221'%3E%3Crect width='194' height='221' fill='white'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 86.8541L0.0241885 221L43.9943 201.05V66.9282L0 86.8541ZM61.4811 59.6822L149.494 164.216V19.9262L193.488 0V192.91L132.999 221L61.4811 133.808V59.6822Z' fill='%23FF7300'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 19.9262L0.012093 44.1034L0.024186 68.2807L43.9943 48.306V0L0 19.9262Z' fill='%23000000'/%3E%3C/svg%3E">
+    
+    <!-- ====== ANDROID CHROME ICONS ====== -->
+    <link rel="icon" type="image/png" sizes="192x192" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 194 221'%3E%3Crect width='194' height='221' fill='white'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 86.8541L0.0241885 221L43.9943 201.05V66.9282L0 86.8541ZM61.4811 59.6822L149.494 164.216V19.9262L193.488 0V192.91L132.999 221L61.4811 133.808V59.6822Z' fill='%23FF7300'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 19.9262L0.012093 44.1034L0.024186 68.2807L43.9943 48.306V0L0 19.9262Z' fill='%23000000'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/png" sizes="512x512" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 194 221'%3E%3Crect width='194' height='221' fill='white'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 86.8541L0.0241885 221L43.9943 201.05V66.9282L0 86.8541ZM61.4811 59.6822L149.494 164.216V19.9262L193.488 0V192.91L132.999 221L61.4811 133.808V59.6822Z' fill='%23FF7300'/%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M0 19.9262L0.012093 44.1034L0.024186 68.2807L43.9943 48.306V0L0 19.9262Z' fill='%23000000'/%3E%3C/svg%3E">
+    
+    <!-- ====== WEB APP MANIFEST (PWA) ====== -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- ====== THEME COLOR ====== -->
+    <meta name="theme-color" content="#FF7300">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Геолокация">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <link rel="stylesheet" href="style.css">>
 </head>
 <body>
     <div class="app-container">
         <!-- Шапка -->
         <header class="app-header">
             <div class="header-content">
-                <h1>📍 Геолокация</h1>
+                <h1>INSTALYATOR.PRO</h1>
                 <div id="userInfo" class="user-info hidden">
                     <span id="userName">Пользователь</span>
                     <img id="userAvatar" src="" alt="Avatar" class="avatar">
@@ -28,41 +49,41 @@
                     <h2>Геолокация сотрудников</h2>
                     <p>Войдите или зарегистрируйтесь для отправки геолокации</p>
                     
-                    <!-- Форма входа -->
-                    <div id="loginForm">
+                    <!-- Форма входа (обернута в <form>) -->
+                    <form id="loginForm" onsubmit="return false;">
                         <div class="form-group">
                             <label>Имя или Email</label>
-                            <input type="text" id="loginName" placeholder="Введите имя или email" class="form-input">
+                            <input type="text" id="loginName" placeholder="Введите имя или email" class="form-input" autocomplete="username">
                         </div>
                         <div class="form-group">
                             <label>Пароль</label>
-                            <input type="password" id="loginPassword" placeholder="Введите пароль" class="form-input">
+                            <input type="password" id="loginPassword" placeholder="Введите пароль" class="form-input" autocomplete="current-password">
                         </div>
-                        <button id="loginBtn" class="btn btn-success btn-large">🔑 Войти</button>
+                        <button type="button" id="loginBtn" class="btn btn-success btn-large">🔑 Войти</button>
                         <p style="margin-top:12px;text-align:center;">
                             <a href="#" id="switchToRegister" style="color:#2c3e7a;">Нет аккаунта? Зарегистрироваться</a>
                         </p>
-                    </div>
+                    </form>
                     
-                    <!-- Форма регистрации -->
-                    <div id="registerForm" class="hidden">
+                    <!-- Форма регистрации (обернута в <form>) -->
+                    <form id="registerForm" class="hidden" onsubmit="return false;">
                         <div class="form-group">
                             <label>Ваше имя</label>
-                            <input type="text" id="registerName" placeholder="Иван Иванов" class="form-input">
+                            <input type="text" id="registerName" placeholder="Иван Иванов" class="form-input" autocomplete="name">
                         </div>
                         <div class="form-group">
                             <label>Email</label>
-                            <input type="email" id="registerEmail" placeholder="email@example.com" class="form-input">
+                            <input type="email" id="registerEmail" placeholder="email@example.com" class="form-input" autocomplete="email">
                         </div>
                         <div class="form-group">
                             <label>Пароль</label>
-                            <input type="password" id="registerPassword" placeholder="Минимум 4 символа" class="form-input">
+                            <input type="password" id="registerPassword" placeholder="Минимум 4 символа" class="form-input" autocomplete="new-password">
                         </div>
-                        <button id="registerBtn" class="btn btn-success btn-large">📝 Зарегистрироваться</button>
+                        <button type="button" id="registerBtn" class="btn btn-success btn-large">📝 Зарегистрироваться</button>
                         <p style="margin-top:12px;text-align:center;">
                             <a href="#" id="switchToLogin" style="color:#2c3e7a;">Уже есть аккаунт? Войти</a>
                         </p>
-                    </div>
+                    </form>
                 </div>
             </div>
 
