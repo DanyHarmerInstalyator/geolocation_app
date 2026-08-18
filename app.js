@@ -7,9 +7,6 @@ class GeolocationApp {
         this.currentPhoto = null;
         this.currentPosition = null;
         this.watchId = null;
-        this.accessToken = null;
-        this.refreshToken = null;
-        this.domain = null;
         this.isAuthorized = false;
 
         this.initializeElements();
@@ -23,13 +20,20 @@ class GeolocationApp {
             geoSendSection: document.getElementById('geoSendSection'),
             historySection: document.getElementById('historySection'),
 
-            authBtn: document.getElementById('authBtn'),
+            loginBtn: document.getElementById('loginBtn'),
+            registerBtn: document.getElementById('registerBtn'),
             sendGeoBtn: document.getElementById('sendGeoBtn'),
             logoutBtn: document.getElementById('logoutBtn'),
 
-            userInfo: document.getElementById('userInfo'),
             userName: document.getElementById('userName'),
+            userDisplay: document.getElementById('userDisplay'),
             userAvatar: document.getElementById('userAvatar'),
+
+            loginName: document.getElementById('loginName'),
+            loginPassword: document.getElementById('loginPassword'),
+            registerName: document.getElementById('registerName'),
+            registerEmail: document.getElementById('registerEmail'),
+            registerPassword: document.getElementById('registerPassword'),
 
             comment: document.getElementById('comment'),
             photoInput: document.getElementById('photoInput'),
@@ -49,11 +53,14 @@ class GeolocationApp {
             navSend: document.getElementById('navSend'),
             navHistory: document.getElementById('navHistory'),
             navAdmin: document.getElementById('navAdmin'),
+            switchToRegister: document.getElementById('switchToRegister'),
+            switchToLogin: document.getElementById('switchToLogin'),
         };
     }
 
     initializeEventListeners() {
-        this.elements.authBtn.addEventListener('click', () => this.authorize());
+        this.elements.loginBtn.addEventListener('click', () => this.login());
+        this.elements.registerBtn.addEventListener('click', () => this.register());
         this.elements.sendGeoBtn.addEventListener('click', () => this.sendGeolocation());
         this.elements.logoutBtn.addEventListener('click', () => this.logout());
         this.elements.photoInput.addEventListener('change', (e) => this.handlePhotoUpload(e));
@@ -61,254 +68,140 @@ class GeolocationApp {
         this.elements.navSend.addEventListener('click', () => this.switchTab('send'));
         this.elements.navHistory.addEventListener('click', () => this.switchTab('history'));
         this.elements.navAdmin.addEventListener('click', () => this.openAdminPanel());
+        this.elements.switchToRegister.addEventListener('click', () => this.switchForm('register'));
+        this.elements.switchToLogin.addEventListener('click', () => this.switchForm('login'));
     }
 
-    // 🔑 Авторизация через OAuth.
-    // ВАЖНО: пуш-подтверждение входа с телефона — это не кастомная deep-link-схема,
-    // а встроенный механизм самого портала Битрикс24. Он срабатывает сам,
-    // когда пользователь заходит на стандартную страницу авторизации в браузере,
-    // если у него включено подтверждение входа через мобильное приложение.
-    // Схемы вида bitrix24://oauth/authorize/ не существует — такая ссылка
-    // просто открывает приложение "в пустоту", без передачи ему контекста
-    // авторизации, поэтому оно ничего не показывает и ничего не подтверждает.
-   // app.js — только измененные методы
+    // ==================== АВТОРИЗАЦИЯ ====================
 
-// 🔑 Авторизация через OAuth с пуш-подтверждением
-authorize() {
-    const authUrl =
-        `https://hdl.bitrix24.ru/oauth/authorize/` +
-        `?client_id=${CONFIG.CLIENT_ID}` +
-        `&response_type=code` +
-        `&redirect_uri=${encodeURIComponent(CONFIG.REDIRECT_URI)}` +
-        `&approval_prompt=auto`;  // Включает пуш-подтверждение
-
-    console.log('🔑 Переход на авторизацию с пуш-подтверждением:', authUrl);
-    window.location.href = authUrl;
-}
-
-showAuthSection() {
-    this.elements.authSection.classList.remove('hidden');
-    this.elements.geoSendSection.classList.add('hidden');
-    this.elements.historySection.classList.add('hidden');
-    this.elements.userInfo.classList.add('hidden');
-    this.elements.sendGeoBtn.disabled = true;
-
-    const authBtn = this.elements.authBtn;
-    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    
-    if (isMobile) {
-        authBtn.textContent = '📱 Войти через приложение Битрикс24';
-    } else {
-        authBtn.textContent = '🔑 Войти через Битрикс24';
-    }
-    authBtn.classList.remove('btn-primary');
-    authBtn.classList.add('btn-success');
-
-    // Обновляем подсказку
-    const infoDiv = document.querySelector('.auth-info');
-    if (infoDiv) {
-        infoDiv.innerHTML = `
-            <small>🔔 После нажатия на кнопку входа:</small><br>
-            <small>📱 На телефон придёт пуш-уведомление для подтверждения</small>
-        `;
-    }
-
-    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-}
-
-    // Проверка авторизации
     checkAuth() {
         console.log('🔍 Проверка авторизации...');
-
-        const params = new URLSearchParams(window.location.search);
-        const code = params.get('code');
-
-        if (code) {
-            console.log('✅ Получен code:', code);
-            window.history.replaceState({}, document.title, window.location.pathname);
-            this.exchangeCodeForToken(code);
-            return;
+        
+        const userData = localStorage.getItem('geolocation_user');
+        if (userData) {
+            try {
+                this.user = JSON.parse(userData);
+                this.isAuthorized = true;
+                this.showGeoSendSection();
+                this.updateUserInfo();
+                this.loadHistory();
+                this.startGeolocation();
+                this.showStatus(`✅ Добро пожаловать, ${this.user.name}!`, 'success');
+                return;
+            } catch (e) {
+                console.error('Ошибка чтения пользователя:', e);
+            }
         }
-
-        const token = localStorage.getItem('b24_token');
-        const domain = localStorage.getItem('b24_domain');
-        const refreshToken = localStorage.getItem('b24_refresh_token');
-
-        if (token && domain) {
-            console.log('💾 Восстанавливаем сессию из localStorage');
-            this.accessToken = token;
-            this.domain = domain;
-            this.refreshToken = refreshToken;
-            this.isAuthorized = true;
-            this.showGeoSendSection();
-            this.getUserInfo();
-            return;
-        }
-
-        console.log('❌ Нет данных авторизации');
+        
         this.showAuthSection();
     }
 
-    // Обмен code на access_token — через Worker
-    async exchangeCodeForToken(code) {
-        console.log('🔄 Обмен code на token...');
-        this.showStatus('⏳ Обмен кода на токен...', 'loading');
+    // Регистрация
+    register() {
+        const name = this.elements.registerName.value.trim();
+        const email = this.elements.registerEmail.value.trim();
+        const password = this.elements.registerPassword.value.trim();
 
-        try {
-            const response = await fetch(`${CONFIG.API_BASE}/api/oauth/token`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    code,
-                    redirect_uri: CONFIG.REDIRECT_URI,
-                }),
-            });
-
-            const data = await response.json();
-            console.log('📥 Ответ обмена:', data);
-
-            if (data.access_token && data.domain) {
-                this.accessToken = data.access_token;
-                this.refreshToken = data.refresh_token;
-                this.domain = data.domain;
-
-                localStorage.setItem('b24_token', data.access_token);
-                localStorage.setItem('b24_refresh_token', data.refresh_token || '');
-                localStorage.setItem('b24_domain', data.domain);
-
-                window.history.pushState('', '', window.location.pathname);
-                await this.getUserInfo();
-            } else {
-                console.log('⚠️ Не удалось получить токен, пробуем вебхук...');
-                await this.getUserViaWebhook();
-            }
-        } catch (error) {
-            console.error('❌ Ошибка обмена:', error);
-            await this.getUserViaWebhook();
-        }
-    }
-
-    // Универсальный вызов REST-метода через Worker
-    async callRest(method, params = {}) {
-        const body = { params };
-
-        if (this.accessToken && this.domain) {
-            body.auth = { domain: this.domain, access_token: this.accessToken };
+        if (!name || !email || !password) {
+            this.showStatus('❌ Заполните все поля', 'error');
+            return;
         }
 
-        const response = await fetch(`${CONFIG.API_BASE}/api/rest/${method}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        });
-
-        return response.json();
-    }
-
-    // Получение данных пользователя
-    async getUserInfo() {
-        console.log('🔄 Получение данных пользователя...');
-        this.showStatus('⏳ Загрузка данных пользователя...', 'loading');
-
-        try {
-            const data = await this.callRest('user.current');
-            console.log('📦 Данные пользователя:', data);
-
-            if (data.result) {
-                this.user = data.result;
-                this.isAuthorized = true;
-                localStorage.setItem('b24_user_id', this.user.ID);
-                this.showGeoSendSection();
-                this.updateUserInfo();
-                this.loadHistory();
-                this.startGeolocation();
-                this.showStatus(`✅ Добро пожаловать, ${this.user.NAME || this.user.LOGIN || 'Пользователь'}!`, 'success');
-                return;
-            }
-
-            if (data.error === 'expired_token' && this.refreshToken) {
-                console.log('🔄 Обновляем токен...');
-                const refreshed = await this.tryRefreshToken();
-                if (refreshed) {
-                    return this.getUserInfo();
-                }
-            }
-
-            throw new Error('Не удалось получить данные пользователя');
-        } catch (error) {
-            console.error('❌ Ошибка:', error);
-            await this.getUserViaWebhook();
+        if (password.length < 4) {
+            this.showStatus('❌ Пароль должен быть минимум 4 символа', 'error');
+            return;
         }
-    }
 
-    async tryRefreshToken() {
-        try {
-            const response = await fetch(`${CONFIG.API_BASE}/api/oauth/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refresh_token: this.refreshToken }),
-            });
-            const data = await response.json();
-            if (data.access_token) {
-                this.accessToken = data.access_token;
-                this.refreshToken = data.refresh_token;
-                this.domain = data.domain;
-                localStorage.setItem('b24_token', data.access_token);
-                localStorage.setItem('b24_refresh_token', data.refresh_token || '');
-                localStorage.setItem('b24_domain', data.domain);
-                return true;
-            }
-        } catch (e) {
-            console.error('❌ Не удалось обновить токен:', e);
+        // Проверка, не занят ли пользователь
+        const users = JSON.parse(localStorage.getItem('geolocation_users') || '[]');
+        if (users.find(u => u.email === email)) {
+            this.showStatus('❌ Пользователь с таким email уже зарегистрирован', 'error');
+            return;
         }
-        return false;
+
+        // Сохраняем пользователя
+        const newUser = {
+            id: Date.now(),
+            name: name,
+            email: email,
+            password: password,
+            registeredAt: new Date().toISOString()
+        };
+
+        users.push(newUser);
+        localStorage.setItem('geolocation_users', JSON.stringify(users));
+
+        // Автоматический вход
+        this.user = newUser;
+        this.isAuthorized = true;
+        localStorage.setItem('geolocation_user', JSON.stringify(newUser));
+
+        this.showStatus('✅ Регистрация успешна!', 'success');
+        this.showGeoSendSection();
+        this.updateUserInfo();
+        this.loadHistory();
+        this.startGeolocation();
     }
 
-    // Fallback: получение данных через вебхук
-    async getUserViaWebhook() {
-        console.log('🔄 Fallback: получение данных через вебхук...');
+    // Вход
+    login() {
+        const name = this.elements.loginName.value.trim();
+        const password = this.elements.loginPassword.value.trim();
 
-        this.accessToken = null;
-        this.domain = null;
+        if (!name || !password) {
+            this.showStatus('❌ Введите имя и пароль', 'error');
+            return;
+        }
 
-        try {
-            const data = await this.callRest('user.current');
+        const users = JSON.parse(localStorage.getItem('geolocation_users') || '[]');
+        const user = users.find(u => 
+            (u.name.toLowerCase() === name.toLowerCase() || u.email.toLowerCase() === name.toLowerCase()) &&
+            u.password === password
+        );
 
-            if (data.result) {
-                this.user = data.result;
-                this.isAuthorized = true;
-                localStorage.setItem('b24_user_id', this.user.ID);
-                this.showGeoSendSection();
-                this.updateUserInfo();
-                this.loadHistory();
-                this.startGeolocation();
-                this.showStatus(`⚠️ Работа через вебхук (пользователь: ${this.user.NAME || this.user.LOGIN})`, 'loading');
-                return;
-            }
+        if (!user) {
+            this.showStatus('❌ Неверное имя или пароль', 'error');
+            return;
+        }
 
-            throw new Error('Не удалось получить данные пользователя');
-        } catch (error) {
-            console.error('❌ Ошибка fallback:', error);
-            localStorage.removeItem('b24_token');
-            localStorage.removeItem('b24_refresh_token');
-            localStorage.removeItem('b24_domain');
-            localStorage.removeItem('b24_user_id');
-            this.showAuthSection();
-            this.showStatus('❌ Ошибка авторизации. Попробуйте снова.', 'error');
+        this.user = user;
+        this.isAuthorized = true;
+        localStorage.setItem('geolocation_user', JSON.stringify(user));
+
+        this.showStatus('✅ Вход выполнен!', 'success');
+        this.showGeoSendSection();
+        this.updateUserInfo();
+        this.loadHistory();
+        this.startGeolocation();
+    }
+
+    // Переключение между формами
+    switchForm(form) {
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        
+        if (form === 'register') {
+            loginForm.classList.add('hidden');
+            registerForm.classList.remove('hidden');
+        } else {
+            loginForm.classList.remove('hidden');
+            registerForm.classList.add('hidden');
         }
     }
 
     updateUserInfo() {
         if (!this.user) return;
-
-        const name = this.user.NAME || this.user.LOGIN || this.user.EMAIL || 'Пользователь';
-        this.elements.userName.textContent = name;
-
-        const initials = name.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2);
+        
+        this.elements.userName.textContent = this.user.name;
+        this.elements.userDisplay.textContent = this.user.name;
+        
+        const initials = this.user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
         this.elements.userAvatar.src = `data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%232c3e7a"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="white" font-size="40" font-family="Arial"%3E${initials}%3C/text%3E%3C/svg%3E`;
-
-        this.elements.userInfo.classList.remove('hidden');
+        
+        this.elements.userInfo?.classList.remove('hidden');
     }
+
+    // ==================== ГЕОЛОКАЦИЯ ====================
 
     startGeolocation() {
         if (!navigator.geolocation) {
@@ -362,6 +255,8 @@ showAuthSection() {
         this.elements.sendGeoBtn.disabled = true;
     }
 
+    // ==================== ФОТО ====================
+
     handlePhotoUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -398,6 +293,8 @@ showAuthSection() {
         this.elements.previewImg.src = '';
     }
 
+    // ==================== ОТПРАВКА ====================
+
     async sendGeolocation() {
         if (!this.currentPosition) {
             this.showStatus('❌ Местоположение не определено', 'error');
@@ -413,20 +310,16 @@ showAuthSection() {
         this.showStatus('⏳ Отправка...', 'loading');
 
         try {
-            const userName = this.user?.NAME || this.user?.LOGIN || 'Пользователь';
-
-            // Ссылки на Яндекс.Карты
+            const userName = this.user?.name || 'Пользователь';
             const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
-            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-            const mapLink = isMobile ? `yandexmaps://maps.yandex.ru/?pt=${lng},${lat}&z=17&l=map` : yandexMapsUrl;
 
             let messageText = `📍 Геолокация от ${userName}\n`;
             messageText += `🕐 Время: ${timestamp}\n`;
             messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
             messageText += `💬 Комментарий: ${comment}\n`;
-            messageText += `🗺️ Яндекс.Карты: ${mapLink}`;
+            messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
 
-            const messageParams = {
+            const messageData = {
                 CHAT_ID: CONFIG.CHAT_ID || null,
                 MESSAGE: messageText
             };
@@ -434,18 +327,23 @@ showAuthSection() {
             if (this.currentPhoto) {
                 const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
                 const base64Only = compressedPhoto.split(',')[1];
-                messageParams.FILES = {
+                messageData.FILES = {
                     n1: ['photo.jpg', base64Only]
                 };
             }
 
-            console.log('📤 Отправка:', messageParams);
+            console.log('📤 Отправка:', messageData);
 
-            const data = await this.callRest('im.message.add', messageParams);
-            console.log('📥 Ответ:', data);
+            const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(messageData)
+            });
+
+            const data = await response.json();
 
             if (data.result) {
-                this.showStatus('✅ Геолокация успешно отправлена в чат!', 'success');
+                this.showStatus('✅ Геолокация отправлена!', 'success');
                 this.elements.comment.value = '';
                 this.removePhoto();
 
@@ -453,24 +351,15 @@ showAuthSection() {
                     time: timestamp,
                     comment: comment,
                     coords: this.currentPosition,
-                    photo: this.currentPhoto,
-                    mapLink: mapLink
+                    photo: this.currentPhoto
                 });
                 this.loadHistory();
             } else {
-                throw new Error(data.error_description || data.error || 'Ошибка отправки');
+                throw new Error(data.error_description || 'Ошибка отправки');
             }
         } catch (error) {
             console.error('❌ Ошибка:', error);
             this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
-
-            this.saveToHistory({
-                time: timestamp,
-                comment: comment + ' (не отправлено)',
-                coords: this.currentPosition,
-                photo: this.currentPhoto,
-                error: error.message
-            });
         } finally {
             this.elements.sendGeoBtn.disabled = false;
         }
@@ -501,7 +390,6 @@ showAuthSection() {
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-
                     resolve(canvas.toDataURL('image/jpeg', 0.7));
                 };
                 img.onerror = () => reject(new Error('Ошибка загрузки изображения'));
@@ -512,12 +400,14 @@ showAuthSection() {
         });
     }
 
+    // ==================== ИСТОРИЯ ====================
+
     saveToHistory(item) {
         const history = JSON.parse(localStorage.getItem('geolocation_history') || '[]');
         history.unshift({
             ...item,
-            userId: this.user?.ID,
-            userName: this.user?.NAME || this.user?.LOGIN
+            userId: this.user?.id,
+            userName: this.user?.name
         });
         if (history.length > 100) history.pop();
         localStorage.setItem('geolocation_history', JSON.stringify(history));
@@ -525,7 +415,7 @@ showAuthSection() {
 
     loadHistory() {
         const history = JSON.parse(localStorage.getItem('geolocation_history') || '[]');
-        const userHistory = history.filter(item => item.userId === this.user?.ID);
+        const userHistory = history.filter(item => item.userId === this.user?.id);
         this.renderHistory(userHistory);
     }
 
@@ -562,6 +452,8 @@ showAuthSection() {
         }).join('');
     }
 
+    // ==================== НАВИГАЦИЯ ====================
+
     switchTab(tab) {
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
 
@@ -578,10 +470,6 @@ showAuthSection() {
     }
 
     openAdminPanel() {
-        if (!this.isAuthorized) {
-            this.showStatus('❌ Необходимо авторизоваться', 'error');
-            return;
-        }
         window.open('/admin.html', '_blank');
     }
 
@@ -604,14 +492,8 @@ showAuthSection() {
         this.elements.authSection.classList.remove('hidden');
         this.elements.geoSendSection.classList.add('hidden');
         this.elements.historySection.classList.add('hidden');
-        this.elements.userInfo.classList.add('hidden');
+        if (this.elements.userInfo) this.elements.userInfo.classList.add('hidden');
         this.elements.sendGeoBtn.disabled = true;
-
-        const authBtn = this.elements.authBtn;
-        authBtn.textContent = '🔑 Войти через Битрикс24';
-        authBtn.classList.remove('btn-primary');
-        authBtn.classList.add('btn-success');
-
         document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     }
 
@@ -624,23 +506,13 @@ showAuthSection() {
 
     logout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
-            localStorage.removeItem('b24_token');
-            localStorage.removeItem('b24_refresh_token');
-            localStorage.removeItem('b24_domain');
-            localStorage.removeItem('b24_user_id');
-            localStorage.removeItem('geolocation_history');
-
+            localStorage.removeItem('geolocation_user');
             this.user = null;
             this.isAuthorized = false;
-            this.accessToken = null;
-            this.refreshToken = null;
-            this.domain = null;
             this.currentPosition = null;
-
             if (this.watchId) {
                 navigator.geolocation.clearWatch(this.watchId);
             }
-
             this.showAuthSection();
             this.showStatus('👋 Вы вышли из системы', 'loading');
         }

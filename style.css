@@ -413,3 +413,37 @@ textarea:focus {
         padding: 16px;
     }
 }
+/* Добавить в style.css */
+
+.form-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e0e0e0;
+    border-radius: 12px;
+    font-size: 16px;
+    font-family: inherit;
+    transition: border-color 0.3s ease;
+    background: #fafafa;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #2c3e7a;
+    background: white;
+}
+
+#loginForm, #registerForm {
+    text-align: left;
+}
+
+#loginForm .form-group, #registerForm .form-group {
+    margin-bottom: 16px;
+}
+
+#loginForm label, #registerForm label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: #444;
+    font-size: 14px;
+}
