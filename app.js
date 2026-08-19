@@ -406,121 +406,194 @@ exportHistory(format = 'excel') {
  
     // ==================== ОТПРАВКА ====================
  
-    async sendGeolocation() {
-        if (!this.currentPosition) {
-            this.showStatus('❌ Местоположение не определено', 'error');
-            return;
+    // ==================== ОТПРАВКА ====================
+
+async sendGeolocation() {
+    if (!this.currentPosition) {
+        this.showStatus('❌ Местоположение не определено', 'error');
+        return;
+    }
+
+    const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
+    const timestamp = new Date().toLocaleString('ru-RU');
+    const lat = this.currentPosition.lat;
+    const lng = this.currentPosition.lng;
+
+    if (this.elements.sendGeoBtn) {
+        this.elements.sendGeoBtn.disabled = true;
+    }
+    this.showStatus('⏳ Отправка...', 'loading');
+
+    // Сохраняем фото до отправки
+    const savedPhoto = this.currentPhoto;
+    let sentWithPhoto = false;
+    let messageId = null;
+    let sendOk = false;
+
+    try {
+        const userName = this.user?.name || 'Пользователь';
+        const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
+
+        let messageText = `📍 Геолокация от ${userName}\n`;
+        messageText += `🕐 Время: ${timestamp}\n`;
+        messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
+        messageText += `💬 Комментарий: ${comment}\n`;
+        messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
+
+        // ====== ОТПРАВКА ФОТО ======
+        if (this.currentPhoto) {
+            try {
+                const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
+                const base64Only = compressedPhoto.split(',')[1];
+
+                if (base64Only && base64Only.length > 0) {
+                    const uploadResponse = await fetch(`${CONFIG.REST_URL}im.v2.File.upload`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            dialogId: CONFIG.CHAT_ID,
+                            fields: {
+                                name: `geo_${Date.now()}.jpg`,
+                                content: base64Only,
+                                message: messageText,
+                            },
+                        }),
+                    });
+                    const uploadData = await uploadResponse.json();
+                    console.log('📥 Ответ im.v2.File.upload:', uploadData);
+
+                    if (uploadData.result) {
+                        sendOk = true;
+                        sentWithPhoto = true;
+                        messageId = uploadData.result;
+                    } else {
+                        console.warn('⚠️ Загрузка фото не удалась:', uploadData.error_description || uploadData.error);
+                        this.showStatus('⚠️ Фото не отправилось, пробую без фото', 'loading');
+                    }
+                }
+            } catch (photoError) {
+                console.error('❌ Ошибка обработки/отправки фото:', photoError);
+                this.showStatus('⚠️ Фото не удалось обработать, отправляю без фото', 'loading');
+            }
         }
- 
-        const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
-        const timestamp = new Date().toLocaleString('ru-RU');
-        const lat = this.currentPosition.lat;
-        const lng = this.currentPosition.lng;
- 
-        if (this.elements.sendGeoBtn) {
-            this.elements.sendGeoBtn.disabled = true;
-        }
-        this.showStatus('⏳ Отправка...', 'loading');
- 
-        try {
-            const userName = this.user?.name || 'Пользователь';
-            const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
- 
-            let messageText = `📍 Геолокация от ${userName}\n`;
-            messageText += `🕐 Время: ${timestamp}\n`;
-            messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
-            messageText += `💬 Комментарий: ${comment}\n`;
-            messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
- 
-            let sendOk = false;
-            let sentWithPhoto = false;
- 
-            if (this.currentPhoto) {
-                // ====== ЕСТЬ ФОТО: im.v2.File.upload ======
-                // Метод im.message.add НЕ поддерживает параметр FILES.
-                // Для фото используется отдельный метод, который одним
-                // вызовом грузит файл на Диск, крепит к чату и шлёт сообщение.
+
+        // ====== ОТПРАВКА СООБЩЕНИЯ (если фото не отправилось) ======
+        if (!sendOk) {
+            let retries = 3;
+            let attempt = 0;
+            let messageSent = false;
+
+            while (attempt < retries && !messageSent) {
                 try {
-                    const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
-                    const base64Only = compressedPhoto.split(',')[1]; // без префикса data:image/...;base64,
- 
-                    if (base64Only && base64Only.length > 0) {
-                        const uploadResponse = await fetch(`${CONFIG.REST_URL}im.v2.File.upload`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                dialogId: CONFIG.CHAT_ID, // "chatXXX" для чата или "XXX" — ID пользователя
-                                fields: {
-                                    name: `geo_${Date.now()}.jpg`,
-                                    content: base64Only,
-                                    message: messageText,
-                                },
-                            }),
-                        });
-                        const uploadData = await uploadResponse.json();
-                        console.log('📥 Ответ im.v2.File.upload:', uploadData);
- 
-                        if (uploadData.result) {
-                            sendOk = true;
-                            sentWithPhoto = true;
-                        } else {
-                            console.warn('⚠️ Загрузка фото не удалась:', uploadData.error_description || uploadData.error);
-                            this.showStatus('⚠️ Фото не отправилось, пробую без фото', 'loading');
+                    const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            CHAT_ID: CONFIG.CHAT_ID,
+                            MESSAGE: messageText,
+                        }),
+                    });
+
+                    const data = await response.json();
+                    console.log('📥 Ответ im.message.add:', data);
+
+                    // Проверка на ошибку лимита
+                    if (data.error === 'QUERY_LIMIT_EXCEEDED' || data.error?.includes('quota')) {
+                        console.warn(`⚠️ Превышен лимит. Попытка ${attempt + 1} из ${retries}. Ждем 2 секунды...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        attempt++;
+                        continue;
+                    }
+
+                    if (data.error) {
+                        throw new Error(data.error_description || data.error);
+                    }
+
+                    messageSent = true;
+                    sendOk = true;
+                    messageId = data.result;
+
+                } catch (fetchError) {
+                    console.error('❌ Ошибка при отправке:', fetchError);
+                    if (fetchError.message.includes('quota') || fetchError.message.includes('QUERY_LIMIT')) {
+                        attempt++;
+                        if (attempt < retries) {
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            continue;
                         }
                     }
-                } catch (photoError) {
-                    console.error('❌ Ошибка обработки/отправки фото:', photoError);
-                    this.showStatus('⚠️ Фото не удалось обработать, отправляю без фото', 'loading');
+                    throw fetchError;
                 }
             }
- 
-            if (!sendOk) {
-                // ====== БЕЗ ФОТО (или фото не отправилось выше): обычное сообщение ======
-                const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        DIALOG_ID: CONFIG.CHAT_ID, // параметр называется DIALOG_ID
-                        MESSAGE: messageText,
-                    }),
-                });
-                const data = await response.json();
-                console.log('📥 Ответ im.message.add:', data);
- 
-                if (typeof data.result !== 'undefined') {
-                    sendOk = true;
-                } else {
-                    throw new Error(data.error_description || data.error || 'Ошибка отправки');
-                }
+
+            if (!messageSent) {
+                console.warn('⚠️ Не удалось отправить после всех попыток');
+                sendOk = false;
             }
- 
-            if (sendOk) {
-                this.showStatus(
-                    sentWithPhoto ? '✅ Геолокация и фото отправлены!' : '✅ Геолокация отправлена!',
-                    'success'
-                );
-                if (this.elements.comment) {
-                    this.elements.comment.value = '';
-                }
- 
+        }
+
+        // ====== СОХРАНЯЕМ ИСТОРИЮ (ДАЖЕ ЕСЛИ БЫЛА ОШИБКА) ======
+        if (sendOk || messageId) {
+            this.showStatus(
+                sentWithPhoto ? '✅ Геолокация и фото отправлены!' : '✅ Геолокация отправлена!',
+                'success'
+            );
+            if (this.elements.comment) {
+                this.elements.comment.value = '';
+            }
+
+            this.saveToHistory({
+                time: timestamp,
+                comment: comment,
+                coords: this.currentPosition,
+                photo: savedPhoto,
+                sentWithPhoto: sentWithPhoto,
+                messageId: messageId,
+                status: 'success'
+            });
+
+            this.removePhoto();
+            this.loadHistory();
+        } else {
+            // Если фото отправилось, но сообщение нет — сохраняем как частичный успех
+            if (sentWithPhoto) {
                 this.saveToHistory({
                     time: timestamp,
-                    comment: comment,
+                    comment: comment + ' (фото отправлено, сообщение нет)',
                     coords: this.currentPosition,
-                    photo: sentWithPhoto ? this.currentPhoto : null,
+                    photo: savedPhoto,
+                    sentWithPhoto: true,
+                    status: 'partial'
                 });
                 this.removePhoto();
                 this.loadHistory();
-            }
-        } catch (error) {
-            console.error('❌ Ошибка:', error);
-            this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
-        } finally {
-            if (this.elements.sendGeoBtn) {
-                this.elements.sendGeoBtn.disabled = false;
+                this.showStatus('⚠️ Фото отправлено, но сообщение не дошло', 'error');
+            } else {
+                throw new Error('Не удалось отправить сообщение');
             }
         }
+
+    } catch (error) {
+        console.error('❌ Ошибка:', error);
+        this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
+
+        // ====== СОХРАНЯЕМ В ИСТОРИЮ ДАЖЕ ПРИ ОШИБКЕ ======
+        this.saveToHistory({
+            time: timestamp,
+            comment: comment + ' (ошибка отправки)',
+            coords: this.currentPosition,
+            photo: savedPhoto,
+            error: error.message,
+            status: 'error'
+        });
+        this.loadHistory();
+
+    } finally {
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = false;
+        }
     }
+}
  
     compressImage(dataUrl, maxWidth, maxHeight) {
         return new Promise((resolve, reject) => {
@@ -586,37 +659,47 @@ exportHistory(format = 'excel') {
     }
  
     renderHistory(history) {
-        const list = this.elements.historyList;
-        if (!list) return;
- 
-        if (history.length === 0) {
-            list.innerHTML = '<p style="text-align:center;color:#888;padding:20px;">История отправок пуста</p>';
-            return;
-        }
- 
-        list.innerHTML = history.map(item => {
-            const lat = item.coords?.lat;
-            const lng = item.coords?.lng;
-            const mapLink = lat && lng ?
-                `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map` :
-                '#';
- 
-            return `
-                <div class="history-item">
-                    <div class="time">${item.time || 'Время не указано'}</div>
-                    <div class="content">
-                        <div class="comment">${item.comment || 'Без комментария'}</div>
-                        <div class="coords">
-                            📍 ${lat && lng ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Координаты не указаны'}
-                            ${lat && lng ? ` <a href="${mapLink}" target="_blank" style="color:#2c3e7a;text-decoration:none;">🗺️ Яндекс.Карты</a>` : ''}
-                        </div>
-                        ${item.photo ? `<img src="${item.photo}" alt="Фото" class="photo" loading="lazy">` : ''}
-                        ${item.error ? `<div style="color:red;font-size:12px;margin-top:4px;">⚠️ ${item.error}</div>` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
+    const list = this.elements.historyList;
+    if (!list) return;
+
+    if (history.length === 0) {
+        list.innerHTML = '<p style="text-align:center;color:rgba(255,255,255,0.2);padding:20px;">История отправок пуста</p>';
+        return;
     }
+
+    list.innerHTML = history.map(item => {
+        const lat = item.coords?.lat;
+        const lng = item.coords?.lng;
+        const mapLink = lat && lng ?
+            `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map` :
+            '#';
+
+        // Статус отправки
+        let statusBadge = '';
+        if (item.status === 'success') {
+            statusBadge = ' <span style="color:#4ade80;font-size:11px;">✓</span>';
+        } else if (item.status === 'partial') {
+            statusBadge = ' <span style="color:#fbbf24;font-size:11px;">⚠</span>';
+        } else if (item.status === 'error') {
+            statusBadge = ' <span style="color:#f87171;font-size:11px;">✗</span>';
+        }
+
+        return `
+            <div class="history-item">
+                <div class="time">${item.time || 'Время не указано'}</div>
+                <div class="content">
+                    <div class="comment">${item.comment || 'Без комментария'}${statusBadge}</div>
+                    <div class="coords">
+                        📍 ${lat && lng ? `${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'Координаты не указаны'}
+                        ${lat && lng ? ` <a href="${mapLink}" target="_blank" style="color:#FF7300;text-decoration:none;">🗺️ Яндекс.Карты</a>` : ''}
+                    </div>
+                    ${item.photo ? `<img src="${item.photo}" alt="Фото" class="photo" loading="lazy">` : ''}
+                    ${item.error ? `<div style="color:#f87171;font-size:12px;margin-top:4px;">⚠️ ${item.error}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
  
     // ==================== НАВИГАЦИЯ ====================
  
