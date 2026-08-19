@@ -1,6 +1,7 @@
 
 // app.js
 import { CONFIG } from './config.js';
+import { HistoryExporter } from './exporter.js';
  
 class GeolocationApp {
     constructor() {
@@ -9,6 +10,7 @@ class GeolocationApp {
         this.currentPosition = null;
         this.watchId = null;
         this.isAuthorized = false;
+        this.exporter = new HistoryExporter();
  
         this.initializeElements();
         this.initializeEventListeners();
@@ -57,6 +59,8 @@ class GeolocationApp {
             navAdmin: document.getElementById('navAdmin'),
             switchToRegister: document.getElementById('switchToRegister'),
             switchToLogin: document.getElementById('switchToLogin'),
+            exportExcelBtn: document.getElementById('exportExcelBtn'), 
+            exportCSVBtn: document.getElementById('exportCSVBtn'), 
         };
     }
  
@@ -95,13 +99,42 @@ class GeolocationApp {
                 this.switchForm('register');
             });
         }
+           if (this.elements.exportExcelBtn) {
+        this.elements.exportExcelBtn.addEventListener('click', () => {
+            this.exportHistory('excel');
+        });
+    }
         if (this.elements.switchToLogin) {
             this.elements.switchToLogin.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.switchForm('login');
+                
             });
         }
     }
+    
+ // ==================== ЭКСПОРТ ИСТОРИИ ====================
+
+exportHistory(format = 'excel') {
+    if (!this.isAuthorized || !this.user) {
+        this.showStatus('❌ Необходимо авторизоваться', 'error');
+        return;
+    }
+
+    // Передаём пользователя в экспортер
+    this.exporter.setUser(this.user);
+
+    let result;
+    if (format === 'excel') {
+        result = this.exporter.exportToExcel();
+    } else if (format === 'csv') {
+        result = this.exporter.exportToCSV();
+    }
+
+    if (result) {
+        this.showStatus(`✅ История экспортирована в ${format.toUpperCase()}!`, 'success');
+    }
+}   
  
     // ==================== АВТОРИЗАЦИЯ ====================
  

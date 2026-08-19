@@ -135,12 +135,22 @@
             </div>
 
             <!-- История -->
-            <div id="historySection" class="section hidden">
-                <div class="history-card">
-                    <h3>📋 История отправок</h3>
-                    <div id="historyList" class="history-list"></div>
-                </div>
+<div id="historySection" class="section hidden">
+    <div class="history-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+            <h3 style="margin:0;">📋 История отправок</h3>
+            <div style="display:flex;gap:8px;">
+                <button id="exportExcelBtn" class="btn btn-success" style="width:auto;padding:8px 16px;font-size:13px;">
+                    📊 Excel
+                </button>
+                <button id="exportCSVBtn" class="btn btn-primary" style="width:auto;padding:8px 16px;font-size:13px;">
+                    📄 CSV
+                </button>
             </div>
+        </div>
+        <div id="historyList" class="history-list"></div>
+    </div>
+</div>
         </main>
 
         <!-- Нижняя навигация -->
