@@ -405,195 +405,249 @@ exportHistory(format = 'excel') {
     }
  
     // ==================== ОТПРАВКА ====================
- 
+
     // ==================== ОТПРАВКА ====================
 
-async sendGeolocation() {
-    if (!this.currentPosition) {
-        this.showStatus('❌ Местоположение не определено', 'error');
-        return;
-    }
-
-    const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
-    const timestamp = new Date().toLocaleString('ru-RU');
-    const lat = this.currentPosition.lat;
-    const lng = this.currentPosition.lng;
-
-    if (this.elements.sendGeoBtn) {
-        this.elements.sendGeoBtn.disabled = true;
-    }
-    this.showStatus('⏳ Отправка...', 'loading');
-
-    // Сохраняем фото до отправки
-    const savedPhoto = this.currentPhoto;
-    let sentWithPhoto = false;
-    let messageId = null;
-    let sendOk = false;
-
-    try {
-        const userName = this.user?.name || 'Пользователь';
-        const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
-
-        let messageText = `📍 Геолокация от ${userName}\n`;
-        messageText += `🕐 Время: ${timestamp}\n`;
-        messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
-        messageText += `💬 Комментарий: ${comment}\n`;
-        messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
-
-        // ====== ОТПРАВКА ФОТО ======
-        if (this.currentPhoto) {
-            try {
-                const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
-                const base64Only = compressedPhoto.split(',')[1];
-
-                if (base64Only && base64Only.length > 0) {
-                    const uploadResponse = await fetch(`${CONFIG.REST_URL}im.v2.File.upload`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            dialogId: CONFIG.CHAT_ID,
-                            fields: {
-                                name: `geo_${Date.now()}.jpg`,
-                                content: base64Only,
-                                message: messageText,
-                            },
-                        }),
-                    });
-                    const uploadData = await uploadResponse.json();
-                    console.log('📥 Ответ im.v2.File.upload:', uploadData);
-
-                    if (uploadData.result) {
-                        sendOk = true;
-                        sentWithPhoto = true;
-                        messageId = uploadData.result;
-                    } else {
-                        console.warn('⚠️ Загрузка фото не удалась:', uploadData.error_description || uploadData.error);
-                        this.showStatus('⚠️ Фото не отправилось, пробую без фото', 'loading');
-                    }
-                }
-            } catch (photoError) {
-                console.error('❌ Ошибка обработки/отправки фото:', photoError);
-                this.showStatus('⚠️ Фото не удалось обработать, отправляю без фото', 'loading');
-            }
+    async sendGeolocation() {
+        if (!this.currentPosition) {
+            this.showStatus('❌ Местоположение не определено', 'error');
+            return;
         }
 
-        // ====== ОТПРАВКА СООБЩЕНИЯ (если фото не отправилось) ======
-        if (!sendOk) {
-            let retries = 3;
-            let attempt = 0;
-            let messageSent = false;
+        const comment = this.elements.comment?.value?.trim() || 'Отправка геолокации';
+        const timestamp = new Date().toLocaleString('ru-RU');
+        const lat = this.currentPosition.lat;
+        const lng = this.currentPosition.lng;
 
-            while (attempt < retries && !messageSent) {
+        if (this.elements.sendGeoBtn) {
+            this.elements.sendGeoBtn.disabled = true;
+        }
+        this.showStatus('⏳ Отправка...', 'loading');
+
+        // ВАЖНО: для истории используем СЖАТУЮ версию фото, а не оригинал с камеры.
+        // Оригинал с iPhone может весить 5-10 МБ в base64 — этого достаточно,
+        // чтобы мгновенно выбить квоту localStorage, особенно в PWA
+        // (добавлено на "Домой"), где лимит гораздо жёстче, чем в обычном Safari.
+        let photoForHistory = null;
+        let sentWithPhoto = false;
+        let messageId = null;
+        let sendOk = false;
+
+        try {
+            const userName = this.user?.name || 'Пользователь';
+            const yandexMapsUrl = `https://yandex.ru/maps/?pt=${lng},${lat}&z=17&l=map`;
+
+            let messageText = `📍 Геолокация от ${userName}\n`;
+            messageText += `🕐 Время: ${timestamp}\n`;
+            messageText += `📌 Координаты: ${lat.toFixed(6)}, ${lng.toFixed(6)}\n`;
+            messageText += `💬 Комментарий: ${comment}\n`;
+            messageText += `🗺️ Яндекс.Карты: ${yandexMapsUrl}`;
+
+            // ====== ОТПРАВКА ФОТО ======
+            if (this.currentPhoto) {
                 try {
-                    const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            CHAT_ID: CONFIG.CHAT_ID,
-                            MESSAGE: messageText,
-                        }),
-                    });
+                    const compressedPhoto = await this.compressImage(this.currentPhoto, 800, 800);
+                    photoForHistory = compressedPhoto; // именно сжатую версию кладём в историю
+                    const base64Only = compressedPhoto.split(',')[1];
 
-                    const data = await response.json();
-                    console.log('📥 Ответ im.message.add:', data);
+                    if (base64Only && base64Only.length > 0) {
+                        const uploadResponse = await fetch(`${CONFIG.REST_URL}im.v2.File.upload`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                dialogId: CONFIG.CHAT_ID,
+                                fields: {
+                                    name: `geo_${Date.now()}.jpg`,
+                                    content: base64Only,
+                                    message: messageText,
+                                },
+                            }),
+                        });
+                        const uploadData = await uploadResponse.json();
+                        console.log('📥 Ответ im.v2.File.upload:', uploadData);
 
-                    // Проверка на ошибку лимита
-                    if (data.error === 'QUERY_LIMIT_EXCEEDED' || data.error?.includes('quota')) {
-                        console.warn(`⚠️ Превышен лимит. Попытка ${attempt + 1} из ${retries}. Ждем 2 секунды...`);
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                        attempt++;
-                        continue;
-                    }
-
-                    if (data.error) {
-                        throw new Error(data.error_description || data.error);
-                    }
-
-                    messageSent = true;
-                    sendOk = true;
-                    messageId = data.result;
-
-                } catch (fetchError) {
-                    console.error('❌ Ошибка при отправке:', fetchError);
-                    if (fetchError.message.includes('quota') || fetchError.message.includes('QUERY_LIMIT')) {
-                        attempt++;
-                        if (attempt < retries) {
-                            await new Promise(resolve => setTimeout(resolve, 2000));
-                            continue;
+                        if (uploadData.result) {
+                            sendOk = true;
+                            sentWithPhoto = true;
+                            messageId = uploadData.result;
+                        } else {
+                            console.warn('⚠️ Загрузка фото не удалась:', uploadData.error_description || uploadData.error);
+                            this.showStatus('⚠️ Фото не отправилось, пробую без фото', 'loading');
                         }
                     }
-                    throw fetchError;
+                } catch (photoError) {
+                    console.error('❌ Ошибка обработки/отправки фото:', photoError);
+                    this.showStatus('⚠️ Фото не удалось обработать, отправляю без фото', 'loading');
                 }
             }
 
-            if (!messageSent) {
-                console.warn('⚠️ Не удалось отправить после всех попыток');
-                sendOk = false;
-            }
-        }
+            // ====== ОТПРАВКА СООБЩЕНИЯ (если фото не отправилось) ======
+            if (!sendOk) {
+                let retries = 3;
+                let attempt = 0;
+                let messageSent = false;
 
-        // ====== СОХРАНЯЕМ ИСТОРИЮ (ДАЖЕ ЕСЛИ БЫЛА ОШИБКА) ======
-        if (sendOk || messageId) {
-            this.showStatus(
-                sentWithPhoto ? '✅ Геолокация и фото отправлены!' : '✅ Геолокация отправлена!',
-                'success'
-            );
-            if (this.elements.comment) {
-                this.elements.comment.value = '';
+                while (attempt < retries && !messageSent) {
+                    try {
+                        const response = await fetch(`${CONFIG.REST_URL}im.message.add`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                DIALOG_ID: CONFIG.CHAT_ID, // параметр называется DIALOG_ID
+                                MESSAGE: messageText,
+                            }),
+                        });
+
+                        const data = await response.json();
+                        console.log('📥 Ответ im.message.add:', data);
+
+                        if (data.error === 'QUERY_LIMIT_EXCEEDED' || data.error?.includes('quota')) {
+                            console.warn(`⚠️ Превышен лимит запросов к API. Попытка ${attempt + 1} из ${retries}. Ждём 2 сек...`);
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            attempt++;
+                            continue;
+                        }
+
+                        if (data.error) {
+                            throw new Error(data.error_description || data.error);
+                        }
+
+                        messageSent = true;
+                        sendOk = true;
+                        messageId = data.result;
+                    } catch (fetchError) {
+                        console.error('❌ Ошибка при отправке:', fetchError);
+                        if (fetchError.message?.includes('quota') || fetchError.message?.includes('QUERY_LIMIT')) {
+                            attempt++;
+                            if (attempt < retries) {
+                                await new Promise(resolve => setTimeout(resolve, 2000));
+                                continue;
+                            }
+                        }
+                        throw fetchError;
+                    }
+                }
+
+                if (!messageSent) {
+                    console.warn('⚠️ Не удалось отправить после всех попыток');
+                    sendOk = false;
+                }
             }
+
+            // ====== СОХРАНЯЕМ ИСТОРИЮ ======
+            if (sendOk || messageId) {
+                this.showStatus(
+                    sentWithPhoto ? '✅ Геолокация и фото отправлены!' : '✅ Геолокация отправлена!',
+                    'success'
+                );
+                if (this.elements.comment) {
+                    this.elements.comment.value = '';
+                }
+
+                this.saveToHistory({
+                    time: timestamp,
+                    comment: comment,
+                    coords: this.currentPosition,
+                    photo: sentWithPhoto ? photoForHistory : null,
+                    sentWithPhoto: sentWithPhoto,
+                    messageId: messageId,
+                    status: 'success',
+                });
+
+                this.removePhoto();
+                this.loadHistory();
+            } else {
+                if (sentWithPhoto) {
+                    this.saveToHistory({
+                        time: timestamp,
+                        comment: comment + ' (фото отправлено, сообщение нет)',
+                        coords: this.currentPosition,
+                        photo: photoForHistory,
+                        sentWithPhoto: true,
+                        status: 'partial',
+                    });
+                    this.removePhoto();
+                    this.loadHistory();
+                    this.showStatus('⚠️ Фото отправлено, но сообщение не дошло', 'error');
+                } else {
+                    throw new Error('Не удалось отправить сообщение');
+                }
+            }
+        } catch (error) {
+            console.error('❌ Ошибка:', error);
+            this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
 
             this.saveToHistory({
                 time: timestamp,
-                comment: comment,
+                comment: comment + ' (ошибка отправки)',
                 coords: this.currentPosition,
-                photo: savedPhoto,
-                sentWithPhoto: sentWithPhoto,
-                messageId: messageId,
-                status: 'success'
+                photo: photoForHistory,
+                error: error.message,
+                status: 'error',
             });
-
-            this.removePhoto();
             this.loadHistory();
-        } else {
-            // Если фото отправилось, но сообщение нет — сохраняем как частичный успех
-            if (sentWithPhoto) {
-                this.saveToHistory({
-                    time: timestamp,
-                    comment: comment + ' (фото отправлено, сообщение нет)',
-                    coords: this.currentPosition,
-                    photo: savedPhoto,
-                    sentWithPhoto: true,
-                    status: 'partial'
-                });
-                this.removePhoto();
-                this.loadHistory();
-                this.showStatus('⚠️ Фото отправлено, но сообщение не дошло', 'error');
-            } else {
-                throw new Error('Не удалось отправить сообщение');
+        } finally {
+            if (this.elements.sendGeoBtn) {
+                this.elements.sendGeoBtn.disabled = false;
             }
         }
-
-    } catch (error) {
-        console.error('❌ Ошибка:', error);
-        this.showStatus(`❌ Ошибка: ${error.message}`, 'error');
-
-        // ====== СОХРАНЯЕМ В ИСТОРИЮ ДАЖЕ ПРИ ОШИБКЕ ======
-        this.saveToHistory({
-            time: timestamp,
-            comment: comment + ' (ошибка отправки)',
-            coords: this.currentPosition,
-            photo: savedPhoto,
-            error: error.message,
-            status: 'error'
-        });
-        this.loadHistory();
-
-    } finally {
-        if (this.elements.sendGeoBtn) {
-            this.elements.sendGeoBtn.disabled = false;
-        }
     }
-}
+
+    // ==================== ИСТОРИЯ (с защитой от переполнения квоты) ====================
+
+    saveToHistory(item) {
+        const history = JSON.parse(localStorage.getItem('geolocation_history') || '[]');
+        history.unshift({
+            ...item,
+            userId: this.user?.id,
+            userName: this.user?.name,
+        });
+        if (history.length > 100) history.pop();
+
+        this.safeSetHistory(history);
+    }
+
+    // Пытается сохранить историю; если квота localStorage переполнена (типично для
+    // iOS Safari / PWA на "Домой"), последовательно вырезает фото из самых старых
+    // записей и повторяет попытку, пока запись не поместится или фото не кончатся.
+    safeSetHistory(history) {
+        let attempt = [...history];
+        for (let i = 0; i < attempt.length + 1; i++) {
+            try {
+                localStorage.setItem('geolocation_history', JSON.stringify(attempt));
+                return true;
+            } catch (e) {
+                const isQuotaError =
+                    e && (e.name === 'QuotaExceededError' || e.code === 22 || /quota/i.test(e.message || ''));
+                if (!isQuotaError) {
+                    console.error('❌ Ошибка записи истории (не квота):', e);
+                    return false;
+                }
+                // Ищем самую старую запись с фото и вырезаем его, освобождая место
+                const idxWithPhoto = [...attempt].reverse().findIndex(it => it.photo);
+                if (idxWithPhoto === -1) {
+                    // Фото удалять больше неоткуда — режем размер истории
+                    if (attempt.length <= 1) {
+                        console.error('❌ Не удалось сохранить историю: квота переполнена даже без фото');
+                        return false;
+                    }
+                    attempt = attempt.slice(0, Math.max(1, Math.floor(attempt.length / 2)));
+                    continue;
+                }
+                const realIdx = attempt.length - 1 - idxWithPhoto;
+                attempt[realIdx] = { ...attempt[realIdx], photo: null, photoRemoved: true };
+                console.warn('⚠️ localStorage переполнен — убрано фото из старой записи истории');
+            }
+        }
+        return false;
+    }
+
+    loadHistory() {
+        const history = JSON.parse(localStorage.getItem('geolocation_history') || '[]');
+        const userHistory = history.filter(item => item.userId === this.user?.id);
+        this.renderHistory(userHistory);
+    }
+
  
     compressImage(dataUrl, maxWidth, maxHeight) {
         return new Promise((resolve, reject) => {
